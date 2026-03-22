@@ -151,6 +151,40 @@ class BitviewService {
     }
   }
 
+  // Private helper — fetch any dateindex metric as PriceTick list
+  Future<List<PriceTick>> _fetchDateindex(String metric, {int days = 365}) async {
+    final genesis = DateTime.utc(2009, 1, 3);
+    final r = await _dio.get('/api/metric/$metric/dateindex');
+    final body = r.data as Map<String, dynamic>;
+    final data = body['data'];
+    if (data is! List || data.isEmpty) return [];
+    final total = data.length;
+    final startIdx = (total - days).clamp(0, total);
+    final result = <PriceTick>[];
+    for (int i = startIdx; i < total; i++) {
+      final val = (data[i] as num?)?.toDouble();
+      if (val != null && val > 0) {
+        result.add(PriceTick(price: val, timestamp: genesis.add(Duration(days: i))));
+      }
+    }
+    return result;
+  }
+
+  Future<List<PriceTick>> getUnrealizedProfitHistory({int days = 365}) =>
+      _fetchDateindex('unrealized-profit', days: days);
+
+  Future<List<PriceTick>> getUnrealizedLossHistory({int days = 365}) =>
+      _fetchDateindex('unrealized-loss', days: days);
+
+  Future<List<PriceTick>> getRealizedProfitHistory({int days = 365}) =>
+      _fetchDateindex('realized-profit', days: days);
+
+  Future<List<PriceTick>> getRealizedLossHistory({int days = 365}) =>
+      _fetchDateindex('realized-loss', days: days);
+
+  Future<List<PriceTick>> getSupplyInProfitHistory({int days = 365}) =>
+      _fetchDateindex('supply-in-profit', days: days);
+
   /// Fetch 2 years of daily closing prices from bitview.space.
   /// Endpoint: GET /api/metric/price_close/dateindex
   /// Response: {"total": N, "data": [float, ...]} where index 0 = Jan 3, 2009

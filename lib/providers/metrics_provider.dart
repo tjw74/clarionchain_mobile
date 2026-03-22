@@ -34,13 +34,30 @@ final mempoolMetricsProvider =
   );
 });
 
-// --- Realized price history ---
+// --- Realized price history (for market chart) ---
 
 final realizedPriceHistoryProvider =
     FutureProvider<List<PriceTick>>((ref) async {
   final service = ref.watch(bitviewServiceProvider);
   return service.getRealizedPriceHistory(days: 730);
 });
+
+// --- P&L history ---
+
+final unrealizedProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
+    ref.watch(bitviewServiceProvider).getUnrealizedProfitHistory());
+
+final unrealizedLossProvider = FutureProvider<List<PriceTick>>((ref) async =>
+    ref.watch(bitviewServiceProvider).getUnrealizedLossHistory());
+
+final realizedProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
+    ref.watch(bitviewServiceProvider).getRealizedProfitHistory());
+
+final realizedLossProvider = FutureProvider<List<PriceTick>>((ref) async =>
+    ref.watch(bitviewServiceProvider).getRealizedLossHistory());
+
+final supplyInProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
+    ref.watch(bitviewServiceProvider).getSupplyInProfitHistory());
 
 // --- Market ---
 

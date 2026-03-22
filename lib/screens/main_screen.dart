@@ -7,13 +7,15 @@ import 'pages/market_page.dart';
 import 'pages/mining_page.dart';
 import 'pages/mempool_page.dart';
 import 'pages/sentiment_page.dart';
+import 'pages/pnl_page.dart';
 
 const _pages = [
-  (title: 'Price', icon: Icons.show_chart_rounded, widget: PricePage()),
-  (title: 'Market', icon: Icons.pie_chart_outline_rounded, widget: MarketPage()),
-  (title: 'Mining', icon: Icons.memory_rounded, widget: MiningPage()),
-  (title: 'Mempool', icon: Icons.inbox_rounded, widget: MempoolPage()),
-  (title: 'Sentiment', icon: Icons.psychology_rounded, widget: SentimentPage()),
+  (title: 'Price',     icon: Icons.show_chart_rounded,          widget: PricePage()),
+  (title: 'Market',    icon: Icons.pie_chart_outline_rounded,    widget: MarketPage()),
+  (title: 'P&L',       icon: Icons.waterfall_chart_rounded,      widget: PnlPage()),
+  (title: 'Mining',    icon: Icons.memory_rounded,               widget: MiningPage()),
+  (title: 'Mempool',   icon: Icons.inbox_rounded,                widget: MempoolPage()),
+  (title: 'Sentiment', icon: Icons.psychology_rounded,           widget: SentimentPage()),
 ];
 
 class MainScreen extends ConsumerStatefulWidget {
