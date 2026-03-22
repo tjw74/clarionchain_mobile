@@ -132,7 +132,7 @@ class _TopBar extends StatelessWidget {
     return Container(
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 8,
-        bottom: 0,
+        bottom: 10,
         left: 16,
         right: 16,
       ),
