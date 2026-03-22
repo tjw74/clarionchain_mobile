@@ -106,15 +106,10 @@ class _TopBar extends StatelessWidget {
           // Logo / name
           Row(
             children: [
-              Container(
+              Image.asset(
+                'assets/clarionchain_logo.png',
                 width: 28,
                 height: 28,
-                decoration: BoxDecoration(
-                  color: AppColors.btcOrange,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.bolt_rounded,
-                    color: Colors.white, size: 18),
               ),
               const SizedBox(width: 8),
               const Text(
