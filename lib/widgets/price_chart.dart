@@ -1,21 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/price_provider.dart';
 import '../theme/app_theme.dart';
-
-/// A ScaleGestureRecognizer that immediately wins the arena so it
-/// beats PageView's HorizontalDragGestureRecognizer.
-class _EagerScaleRecognizer extends ScaleGestureRecognizer {
-  _EagerScaleRecognizer({super.debugOwner});
-  @override
-  void addAllowedPointer(PointerDownEvent event) {
-    super.addAllowedPointer(event);
-    resolve(GestureDisposition.accepted); // claim immediately
-  }
-}
 
 final _priceFmt = NumberFormat('#,##0', 'en_US');
 
@@ -116,46 +104,33 @@ class _PriceChartState extends ConsumerState<PriceChart>
     const rightReserved = 68.0;
     const bottomReserved = 22.0;
 
-    return RawGestureDetector(
-      behavior: HitTestBehavior.opaque,
-      gestures: {
-        _EagerScaleRecognizer: GestureRecognizerFactoryWithHandlers<_EagerScaleRecognizer>(
-          () => _EagerScaleRecognizer(debugOwner: this),
-          (r) {
-            r.onStart = (d) {
-              final rb = context.findRenderObject() as RenderBox?;
-              _gsWidth = rb?.size.width ?? 300;
-              _gsFocalX = d.localFocalPoint.dx;
-              _gsViewStart = _viewStart;
-              _gsViewEnd = _viewEnd;
-            };
-            r.onUpdate = (d) {
-              if (_gsWidth == 0) return;
-              final oldSpan = _gsViewEnd - _gsViewStart;
-              final newSpan = (oldSpan / d.scale).clamp(0.002, 1.0);
-              final focalFrac = (_gsFocalX / _gsWidth).clamp(0.0, 1.0);
-              final focalData = _gsViewStart + focalFrac * oldSpan;
-              final panPixels = d.localFocalPoint.dx - _gsFocalX;
-              final panData = -(panPixels / _gsWidth) * newSpan;
-              var s = (focalData - focalFrac * newSpan + panData)
-                  .clamp(0.0, 1.0 - newSpan);
-              setState(() {
-                _viewStart = s;
-                _viewEnd = s + newSpan;
-              });
-            };
-          },
-        ),
-        DoubleTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
-          () => DoubleTapGestureRecognizer(debugOwner: this),
-          (r) {
-            r.onDoubleTap = () => setState(() {
-              _viewStart = 0;
-              _viewEnd = 1.0;
-            });
-          },
-        ),
+    return GestureDetector(
+      onScaleStart: (d) {
+        final rb = context.findRenderObject() as RenderBox?;
+        _gsWidth = rb?.size.width ?? 300;
+        _gsFocalX = d.localFocalPoint.dx;
+        _gsViewStart = _viewStart;
+        _gsViewEnd = _viewEnd;
       },
+      onScaleUpdate: (d) {
+        if (_gsWidth == 0 || d.pointerCount < 2) return;
+        final oldSpan = _gsViewEnd - _gsViewStart;
+        final newSpan = (oldSpan / d.scale).clamp(0.002, 1.0);
+        final focalFrac = (_gsFocalX / _gsWidth).clamp(0.0, 1.0);
+        final focalData = _gsViewStart + focalFrac * oldSpan;
+        final panPixels = d.localFocalPoint.dx - _gsFocalX;
+        final panData = -(panPixels / _gsWidth) * newSpan;
+        var s = (focalData - focalFrac * newSpan + panData)
+            .clamp(0.0, 1.0 - newSpan);
+        setState(() {
+          _viewStart = s;
+          _viewEnd = s + newSpan;
+        });
+      },
+      onDoubleTap: () => setState(() {
+        _viewStart = 0;
+        _viewEnd = 1.0;
+      }),
       child: LayoutBuilder(builder: (context, constraints) {
         final chartW = constraints.maxWidth - rightReserved;
         final chartH = constraints.maxHeight - bottomReserved;
