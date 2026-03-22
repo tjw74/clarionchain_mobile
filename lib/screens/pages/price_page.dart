@@ -34,8 +34,7 @@ class PricePage extends ConsumerWidget {
         ? AppColors.positive
         : AppColors.negative;
 
-    return SafeArea(
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,7 +154,6 @@ class PricePage extends ConsumerWidget {
             const SizedBox(height: 16),
           ],
         ),
-      ),
     );
   }
 }
