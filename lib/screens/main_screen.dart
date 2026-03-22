@@ -81,27 +81,8 @@ class _MainScreenState extends ConsumerState<MainScreen> {
               children: [
                 PageView(
                   controller: _pageController,
-                  // Disabled — edge zones below handle swipes so the chart
-                  // can own single-finger drags across the full width.
-                  physics: const NeverScrollableScrollPhysics(),
                   onPageChanged: (i) => setState(() => _currentPage = i),
                   children: _pages.map((p) => p.widget).toList(),
-                ),
-                // Left edge swipe zone
-                Positioned(
-                  left: 0, top: 0, bottom: 0, width: 72,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
-                  ),
-                ),
-                // Right edge swipe zone
-                Positioned(
-                  right: 0, top: 0, bottom: 0, width: 72,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
-                  ),
                 ),
               ],
             ),
