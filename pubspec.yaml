@@ -1,0 +1,25 @@
+name: clarion_mobile
+description: ClarionChain - Real-time Bitcoin Market Insights
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.5.1
+  fl_chart: ^0.68.0
+  web_socket_channel: ^2.4.0
+  dio: ^5.4.3
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
