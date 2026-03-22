@@ -44,10 +44,13 @@ final priceHistoryProvider =
   return PriceHistoryNotifier(ref);
 });
 
+// Sample interval: one chart point every 5 seconds
+const _sampleInterval = Duration(seconds: 5);
+
 class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
   final Ref _ref;
   StreamSubscription<ExchangeTick>? _sub;
-  int _tickCount = 0;
+  DateTime? _lastSample;
 
   PriceHistoryNotifier(this._ref) : super([]) {
     final service = _ref.read(exchangeServiceProvider);
@@ -55,18 +58,17 @@ class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
   }
 
   void _onTick(ExchangeTick tick) {
-    _tickCount++;
-    // Sample ~1 point every 5 ticks across all exchanges to avoid oversampling
-    if (_tickCount % 5 != 0) return;
+    final now = DateTime.now();
+    if (_lastSample != null && now.difference(_lastSample!) < _sampleInterval) {
+      return;
+    }
 
     final priceState = _ref.read(priceStateProvider);
     if (!priceState.hasData) return;
 
-    final newTick = PriceTick(
-      price: priceState.vwap,
-      timestamp: DateTime.now(),
-    );
+    _lastSample = now;
 
+    final newTick = PriceTick(price: priceState.vwap, timestamp: now);
     final history = [...state, newTick];
     if (history.length > _maxHistory) {
       state = history.sublist(history.length - _maxHistory);
@@ -93,7 +95,7 @@ class ChartWindow {
   final double scrollFraction; // 0.0 = oldest visible, 1.0 = newest
 
   const ChartWindow({
-    this.visibleCount = 300,
+    this.visibleCount = 720, // default: 720 pts × 5s = 1 hour view
     this.scrollFraction = 1.0,
   });
 
