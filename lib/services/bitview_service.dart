@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../models/btc_metrics.dart';
+import '../models/exchange_tick.dart';
 
 class BitviewService {
   static const _base = 'https://bitview.space';
@@ -148,6 +149,72 @@ class BitviewService {
     } catch (_) {
       return null;
     }
+  }
+
+  /// Fetch 2 years of daily closing prices from bitview.space.
+  /// Tries several known metric names until one returns data.
+  Future<List<PriceTick>> getDailyPriceHistory({int days = 730}) async {
+    // Try metric names most likely to return daily USD close prices
+    final candidates = [
+      'price-usd',
+      'market-price',
+      'close',
+      'price',
+      'btc-price',
+    ];
+
+    for (final name in candidates) {
+      try {
+        final r = await _dio.get(
+          '/api/metric/$name/date',
+          queryParameters: {'limit': days},
+        );
+        final ticks = _parsePriceSeries(r.data);
+        if (ticks.length > 10) return ticks;
+      } catch (_) {}
+    }
+
+    // Fallback: try without /date index
+    for (final name in candidates) {
+      try {
+        final r = await _dio.get(
+          '/api/metric/$name',
+          queryParameters: {'limit': days},
+        );
+        final ticks = _parsePriceSeries(r.data);
+        if (ticks.length > 10) return ticks;
+      } catch (_) {}
+    }
+
+    return [];
+  }
+
+  List<PriceTick> _parsePriceSeries(dynamic raw) {
+    final list = raw is List ? raw : (raw is Map ? [raw] : []);
+    final result = <PriceTick>[];
+
+    for (final item in list) {
+      if (item is! Map) continue;
+      final rawDate = item['date'] ?? item['time'] ?? item['timestamp'] ?? item['t'];
+      final rawVal = item['value'] ?? item['v'] ?? item['close'] ??
+          item['price'] ?? item['y'];
+      if (rawDate == null || rawVal == null) continue;
+      try {
+        final DateTime dt;
+        if (rawDate is int) {
+          dt = rawDate > 1e10
+              ? DateTime.fromMillisecondsSinceEpoch(rawDate)
+              : DateTime.fromMillisecondsSinceEpoch(rawDate * 1000);
+        } else {
+          dt = DateTime.parse(rawDate.toString());
+        }
+        final price = (rawVal as num).toDouble();
+        if (price > 0) result.add(PriceTick(price: price, timestamp: dt));
+      } catch (_) {}
+    }
+
+    result.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return result;
   }
 
   void dispose() {

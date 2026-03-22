@@ -2,12 +2,23 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/exchange_tick.dart';
 import '../services/exchange_service.dart';
+import '../services/bitview_service.dart';
 
-// Max price history points (1 per ~2s = ~12 hours worth)
-const _maxHistory = 21600;
+// Max total points in history buffer
+const _maxHistory = 25000;
+
+// Sample interval for real-time ticks
+const _sampleInterval = Duration(seconds: 5);
 
 final exchangeServiceProvider = Provider<ExchangeService>((ref) {
   final service = ExchangeService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+// Re-export bitviewServiceProvider here to avoid circular imports
+final _bitviewProvider = Provider<BitviewService>((ref) {
+  final service = BitviewService();
   ref.onDispose(service.dispose);
   return service;
 });
@@ -39,22 +50,39 @@ class PriceStateNotifier extends StateNotifier<PriceState> {
   }
 }
 
+// Whether historical data has finished loading
+final historyLoadingProvider = StateProvider<bool>((ref) => true);
+
 final priceHistoryProvider =
     StateNotifierProvider<PriceHistoryNotifier, List<PriceTick>>((ref) {
   return PriceHistoryNotifier(ref);
 });
 
-// Sample interval: one chart point every 5 seconds
-const _sampleInterval = Duration(seconds: 5);
-
 class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
   final Ref _ref;
   StreamSubscription<ExchangeTick>? _sub;
   DateTime? _lastSample;
+  DateTime? _historyEnd; // last timestamp of loaded historical data
 
   PriceHistoryNotifier(this._ref) : super([]) {
+    _loadHistory();
     final service = _ref.read(exchangeServiceProvider);
     _sub = service.ticks.listen(_onTick);
+  }
+
+  Future<void> _loadHistory() async {
+    _ref.read(historyLoadingProvider.notifier).state = true;
+    try {
+      final bitview = _ref.read(_bitviewProvider);
+      final history = await bitview.getDailyPriceHistory(days: 730);
+      if (mounted && history.isNotEmpty) {
+        state = history;
+        _historyEnd = history.last.timestamp;
+      }
+    } catch (_) {}
+    if (mounted) {
+      _ref.read(historyLoadingProvider.notifier).state = false;
+    }
   }
 
   void _onTick(ExchangeTick tick) {
@@ -65,10 +93,21 @@ class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
 
     final priceState = _ref.read(priceStateProvider);
     if (!priceState.hasData) return;
-
     _lastSample = now;
 
     final newTick = PriceTick(price: priceState.vwap, timestamp: now);
+
+    // Skip if this tick is before or at the last historical point
+    if (_historyEnd != null &&
+        newTick.timestamp.isBefore(
+            _historyEnd!.add(const Duration(minutes: 30)))) {
+      // Still within the historical window — wait for a clean gap
+      if (newTick.timestamp
+          .isBefore(_historyEnd!.add(const Duration(hours: 1)))) {
+        return;
+      }
+    }
+
     final history = [...state, newTick];
     if (history.length > _maxHistory) {
       state = history.sublist(history.length - _maxHistory);
@@ -84,24 +123,24 @@ class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
   }
 }
 
-// Visible chart window state: [startIndex, endIndex]
+// Chart window: what slice of history to display
 final chartWindowProvider =
     StateNotifierProvider<ChartWindowNotifier, ChartWindow>((ref) {
   return ChartWindowNotifier();
 });
 
 class ChartWindow {
-  final int visibleCount; // how many points to show
-  final double scrollFraction; // 0.0 = oldest visible, 1.0 = newest
+  final int? visibleCount; // null = show all
+  final double scrollFraction; // 1.0 = newest end
 
   const ChartWindow({
-    this.visibleCount = 720, // default: 720 pts × 5s = 1 hour view
+    this.visibleCount, // null = show all history
     this.scrollFraction = 1.0,
   });
 
-  ChartWindow copyWith({int? visibleCount, double? scrollFraction}) {
+  ChartWindow copyWith({int? visibleCount, bool clearVisible = false, double? scrollFraction}) {
     return ChartWindow(
-      visibleCount: visibleCount ?? this.visibleCount,
+      visibleCount: clearVisible ? null : (visibleCount ?? this.visibleCount),
       scrollFraction: scrollFraction ?? this.scrollFraction,
     );
   }
@@ -110,10 +149,11 @@ class ChartWindow {
 class ChartWindowNotifier extends StateNotifier<ChartWindow> {
   ChartWindowNotifier() : super(const ChartWindow());
 
-  void zoom(double scaleFactor) {
-    final newCount = (state.visibleCount / scaleFactor)
+  void zoom(double scaleFactor, int totalPoints) {
+    final current = state.visibleCount ?? totalPoints;
+    final newCount = (current / scaleFactor)
         .round()
-        .clamp(30, _maxHistory);
+        .clamp(10, totalPoints);
     state = state.copyWith(visibleCount: newCount);
   }
 
@@ -122,7 +162,7 @@ class ChartWindowNotifier extends StateNotifier<ChartWindow> {
     state = state.copyWith(scrollFraction: newFraction);
   }
 
-  void resetToLatest() {
-    state = state.copyWith(scrollFraction: 1.0);
+  void resetToAll() {
+    state = const ChartWindow(); // show all, newest end
   }
 }
