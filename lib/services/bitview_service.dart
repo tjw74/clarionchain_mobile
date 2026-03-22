@@ -152,69 +152,34 @@ class BitviewService {
   }
 
   /// Fetch 2 years of daily closing prices from bitview.space.
-  /// Tries several known metric names until one returns data.
+  /// Endpoint: GET /api/metric/price_close/dateindex
+  /// Response: {"total": N, "data": [float, ...]} where index 0 = Jan 3, 2009
   Future<List<PriceTick>> getDailyPriceHistory({int days = 730}) async {
-    // Try metric names most likely to return daily USD close prices
-    final candidates = [
-      'price-usd',
-      'market-price',
-      'close',
-      'price',
-      'btc-price',
-    ];
+    try {
+      final r = await _dio.get('/api/metric/price_close/dateindex');
+      final body = r.data as Map<String, dynamic>;
+      final data = body['data'];
+      if (data is! List || data.isEmpty) return [];
 
-    for (final name in candidates) {
-      try {
-        final r = await _dio.get(
-          '/api/metric/$name/date',
-          queryParameters: {'limit': days},
-        );
-        final ticks = _parsePriceSeries(r.data);
-        if (ticks.length > 10) return ticks;
-      } catch (_) {}
-    }
+      // Each index = one day since Bitcoin genesis (Jan 3, 2009)
+      final genesis = DateTime.utc(2009, 1, 3);
+      final totalDays = data.length;
+      final startIdx = (totalDays - days).clamp(0, totalDays);
 
-    // Fallback: try without /date index
-    for (final name in candidates) {
-      try {
-        final r = await _dio.get(
-          '/api/metric/$name',
-          queryParameters: {'limit': days},
-        );
-        final ticks = _parsePriceSeries(r.data);
-        if (ticks.length > 10) return ticks;
-      } catch (_) {}
-    }
-
-    return [];
-  }
-
-  List<PriceTick> _parsePriceSeries(dynamic raw) {
-    final list = raw is List ? raw : (raw is Map ? [raw] : []);
-    final result = <PriceTick>[];
-
-    for (final item in list) {
-      if (item is! Map) continue;
-      final rawDate = item['date'] ?? item['time'] ?? item['timestamp'] ?? item['t'];
-      final rawVal = item['value'] ?? item['v'] ?? item['close'] ??
-          item['price'] ?? item['y'];
-      if (rawDate == null || rawVal == null) continue;
-      try {
-        final DateTime dt;
-        if (rawDate is int) {
-          dt = rawDate > 1e10
-              ? DateTime.fromMillisecondsSinceEpoch(rawDate)
-              : DateTime.fromMillisecondsSinceEpoch(rawDate * 1000);
-        } else {
-          dt = DateTime.parse(rawDate.toString());
+      final result = <PriceTick>[];
+      for (int i = startIdx; i < totalDays; i++) {
+        final price = (data[i] as num?)?.toDouble() ?? 0.0;
+        if (price > 0) {
+          result.add(PriceTick(
+            price: price,
+            timestamp: genesis.add(Duration(days: i)),
+          ));
         }
-        final price = (rawVal as num).toDouble();
-        if (price > 0) result.add(PriceTick(price: price, timestamp: dt));
-      } catch (_) {}
+      }
+      return result;
+    } catch (_) {
+      return [];
     }
-
-    result.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    return result;
   }
 
   void dispose() {
