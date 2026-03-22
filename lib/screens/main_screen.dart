@@ -89,7 +89,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 ),
                 // Left edge swipe zone
                 Positioned(
-                  left: 0, top: 0, bottom: 0, width: 32,
+                  left: 0, top: 0, bottom: 0, width: 72,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
@@ -97,7 +97,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 ),
                 // Right edge swipe zone
                 Positioned(
-                  right: 0, top: 0, bottom: 0, width: 32,
+                  right: 0, top: 0, bottom: 0, width: 72,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
