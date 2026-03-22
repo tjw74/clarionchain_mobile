@@ -91,7 +91,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 Positioned(
                   left: 0, top: 0, bottom: 0, width: 32,
                   child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
+                    behavior: HitTestBehavior.opaque,
                     onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
                   ),
                 ),
@@ -99,7 +99,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
                 Positioned(
                   right: 0, top: 0, bottom: 0, width: 32,
                   child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
+                    behavior: HitTestBehavior.opaque,
                     onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
                   ),
                 ),
