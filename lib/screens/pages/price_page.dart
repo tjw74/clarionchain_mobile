@@ -111,14 +111,6 @@ class PricePage extends ConsumerWidget {
               child: const PriceChart(),
             ),
 
-            const SizedBox(height: 4),
-            const Center(
-              child: Text(
-                'Pinch to zoom  ·  Drag to scroll  ·  Double-tap to reset',
-                style: TextStyle(color: AppColors.textMuted, fontSize: 10),
-              ),
-            ),
-
             const SizedBox(height: 14),
 
             // Stat cards

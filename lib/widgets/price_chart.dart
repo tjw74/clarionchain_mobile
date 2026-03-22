@@ -9,7 +9,7 @@ final _priceFmt = NumberFormat('#,##0', 'en_US');
 
 String _timeLabel(DateTime dt, double visibleDays) {
   if (visibleDays <= 1) return DateFormat('HH:mm').format(dt);
-  if (visibleDays <= 7) return DateFormat('EEE HH:mm').format(dt);
+  if (visibleDays <= 7) return DateFormat('EEE').format(dt);
   if (visibleDays <= 60) return DateFormat('MMM d').format(dt);
   if (visibleDays <= 365) return DateFormat('MMM').format(dt);
   return DateFormat('MMM yy').format(dt);
@@ -22,16 +22,34 @@ class PriceChart extends ConsumerStatefulWidget {
   ConsumerState<PriceChart> createState() => _PriceChartState();
 }
 
-class _PriceChartState extends ConsumerState<PriceChart> {
-  // Visible window: indices into the history list
-  double _viewStart = 0; // 0.0 = oldest
-  double _viewEnd = 1.0; // 1.0 = newest
+class _PriceChartState extends ConsumerState<PriceChart>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulse;
 
-  // For gesture tracking
-  double? _scaleStartSpan;
-  double? _scaleStartMid;
-  double? _scaleStartViewStart;
-  double? _scaleStartViewEnd;
+  // Viewport as fractions [0,1] of the full history
+  double _viewStart = 0.0;
+  double _viewEnd = 1.0;
+
+  // Captured at gesture start (all math is relative to start, avoids drift)
+  double _gsWidth = 0;
+  double _gsFocalX = 0;
+  double _gsViewStart = 0;
+  double _gsViewEnd = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -68,181 +86,201 @@ class _PriceChartState extends ConsumerState<PriceChart> {
         .toList();
 
     final prices = history.map((t) => t.price).toList();
-    final minY = prices.reduce((a, b) => a < b ? a : b);
-    final maxY = prices.reduce((a, b) => a > b ? a : b);
-    final yPadding = ((maxY - minY) * 0.08).clamp(50.0, double.infinity);
+    final minPrice = prices.reduce((a, b) => a < b ? a : b);
+    final maxPrice = prices.reduce((a, b) => a > b ? a : b);
+    final yPad = ((maxPrice - minPrice) * 0.08).clamp(50.0, double.infinity);
+    final effMin = minPrice - yPad;
+    final effMax = maxPrice + yPad;
 
     final isUp = history.last.price >= history.first.price;
     final lineColor = isUp ? AppColors.positive : AppColors.negative;
-    final visibleCount = history.length;
-    final labelInterval =
-        (visibleCount / 4).floorToDouble().clamp(1.0, double.infinity);
+    final vc = history.length;
+    final labelInterval = (vc / 4).floorToDouble().clamp(1.0, double.infinity);
+    final visibleDays =
+        history.last.timestamp.difference(history.first.timestamp).inMinutes /
+            1440.0;
 
-    // Compute visible time span for label formatting
-    final visibleDays = history.last.timestamp
-        .difference(history.first.timestamp)
-        .inMinutes / 1440.0;
+    // Chart layout constants (must match SideTitles reservedSize)
+    const rightReserved = 68.0;
+    const bottomReserved = 22.0;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      // Absorb horizontal drags with 2+ fingers to prevent PageView conflict
-      onScaleStart: (details) {
-        _scaleStartSpan = 1.0; // relative; we use details.scale from onScaleUpdate
-        _scaleStartMid = details.localFocalPoint.dx;
-        _scaleStartViewStart = _viewStart;
-        _scaleStartViewEnd = _viewEnd;
+      onScaleStart: (d) {
+        final rb = context.findRenderObject() as RenderBox?;
+        _gsWidth = rb?.size.width ?? 300;
+        _gsFocalX = d.localFocalPoint.dx;
+        _gsViewStart = _viewStart;
+        _gsViewEnd = _viewEnd;
       },
-      onScaleUpdate: (details) {
-        if (_scaleStartViewStart == null || _scaleStartViewEnd == null) return;
-        final renderBox = context.findRenderObject() as RenderBox?;
-        if (renderBox == null) return;
-        final width = renderBox.size.width;
+      onScaleUpdate: (d) {
+        if (_gsWidth == 0) return;
 
-        final oldSpan = _scaleStartViewEnd! - _scaleStartViewStart!;
+        final oldSpan = _gsViewEnd - _gsViewStart;
+        // scale > 1 = zoom in (shorter span), < 1 = zoom out
+        final newSpan = (oldSpan / d.scale).clamp(0.002, 1.0);
 
-        // Pinch-to-zoom: scale > 1 = zoom in, < 1 = zoom out
-        final newSpan = (oldSpan / details.scale.clamp(0.01, 100.0))
-            .clamp(0.005, 1.0);
+        // Data coordinate under the initial focal point stays fixed
+        final focalFrac = (_gsFocalX / _gsWidth).clamp(0.0, 1.0);
+        final focalData = _gsViewStart + focalFrac * oldSpan;
 
-        // Focal point as fraction of view width → fraction of data span
-        final focalFrac = ((_scaleStartMid ?? width / 2) / width)
-            .clamp(0.0, 1.0);
-        final focalData =
-            _scaleStartViewStart! + focalFrac * oldSpan;
+        // Pan: how far the focal point moved in data-space since gesture start
+        final panPixels = d.localFocalPoint.dx - _gsFocalX;
+        final panData = -(panPixels / _gsWidth) * newSpan;
 
-        // Pan: horizontal translation
-        double panDelta = 0;
-        if (width > 0) {
-          panDelta = -(details.focalPointDelta.dx / width) * newSpan;
-        }
-
-        double newStart =
-            (focalData - focalFrac * newSpan + panDelta).clamp(0.0, 1.0 - newSpan);
-        double newEnd = (newStart + newSpan).clamp(newSpan, 1.0);
-        newStart = newEnd - newSpan;
+        var s = (focalData - focalFrac * newSpan + panData)
+            .clamp(0.0, 1.0 - newSpan);
+        final e = s + newSpan;
 
         setState(() {
-          _viewStart = newStart;
-          _viewEnd = newEnd;
+          _viewStart = s;
+          _viewEnd = e;
         });
       },
-      onDoubleTap: () {
-        setState(() {
-          _viewStart = 0;
-          _viewEnd = 1.0;
-        });
-      },
-      child: LineChart(
-        LineChartData(
-          minY: minY - yPadding,
-          maxY: maxY + yPadding,
-          clipData: const FlClipData.all(),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) =>
-                const FlLine(color: AppColors.border, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 68,
-                getTitlesWidget: (value, meta) {
-                  if (value == meta.min || value == meta.max) {
-                    return const SizedBox.shrink();
-                  }
-                  return Text(
-                    '\$${_priceFmt.format(value)}',
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
-                    textAlign: TextAlign.right,
-                  );
-                },
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 22,
-                interval: labelInterval,
-                getTitlesWidget: (value, meta) {
-                  final idx = value.toInt();
-                  if (idx < 0 || idx >= history.length) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      _timeLabel(history[idx].timestamp, visibleDays),
-                      style: const TextStyle(
-                          color: AppColors.textMuted, fontSize: 9),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ),
-          lineTouchData: LineTouchData(
-            touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => AppColors.surfaceElevated,
-              tooltipRoundedRadius: 8,
-              getTooltipItems: (spots) => spots.map((s) {
-                final idx = s.x.toInt();
-                final ts =
-                    idx < history.length ? history[idx].timestamp : DateTime.now();
-                return LineTooltipItem(
-                  '\$${_priceFmt.format(s.y)}\n',
-                  const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: DateFormat('MMM d, HH:mm').format(ts),
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.normal,
-                      ),
-                    ),
-                  ],
-                );
-              }).toList(),
-            ),
-          ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: visibleCount < 500,
-              curveSmoothness: 0.2,
-              color: lineColor,
-              barWidth: visibleCount > 300 ? 1.5 : 2,
-              isStrokeCapRound: true,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
+      onDoubleTap: () => setState(() {
+        _viewStart = 0;
+        _viewEnd = 1.0;
+      }),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final chartW = constraints.maxWidth - rightReserved;
+        final chartH = constraints.maxHeight - bottomReserved;
+
+        // Screen coords of the last (live) data point
+        final lastPrice = history.last.price;
+        final dotX = chartW; // last index = right edge
+        final dotY = chartH * (1.0 - (lastPrice - effMin) / (effMax - effMin));
+
+        return Stack(children: [
+          // ── Chart ──────────────────────────────────────────
+          LineChart(
+            LineChartData(
+              minY: effMin,
+              maxY: effMax,
+              clipData: const FlClipData.all(),
+              // Disable fl_chart's internal gesture detector so ours wins
+              lineTouchData: const LineTouchData(enabled: false),
+              gridData: FlGridData(
                 show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    lineColor.withValues(alpha: 0.15),
-                    lineColor.withValues(alpha: 0.0),
-                  ],
+                drawVerticalLine: false,
+                getDrawingHorizontalLine: (_) =>
+                    const FlLine(color: AppColors.border, strokeWidth: 1),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false)),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: rightReserved,
+                    getTitlesWidget: (value, meta) {
+                      if (value == meta.min || value == meta.max) {
+                        return const SizedBox.shrink();
+                      }
+                      return Text(
+                        '\$${_priceFmt.format(value)}',
+                        style: const TextStyle(
+                            color: AppColors.textMuted, fontSize: 10),
+                        textAlign: TextAlign.right,
+                      );
+                    },
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: bottomReserved,
+                    interval: labelInterval,
+                    getTitlesWidget: (value, meta) {
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= history.length) {
+                        return const SizedBox.shrink();
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          _timeLabel(history[idx].timestamp, visibleDays),
+                          style: const TextStyle(
+                              color: AppColors.textMuted, fontSize: 9),
+                        ),
+                      );
+                    },
+                  ),
                 ),
               ),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: vc < 500,
+                  curveSmoothness: 0.2,
+                  color: lineColor,
+                  barWidth: vc > 300 ? 1.5 : 2,
+                  isStrokeCapRound: true,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        lineColor.withValues(alpha: 0.15),
+                        lineColor.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        duration: const Duration(milliseconds: 150),
-        curve: Curves.easeOut,
-      ),
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+          ),
+
+          // ── Pulsing live-price dot ──────────────────────────
+          Positioned(
+            left: dotX - 10,
+            top: dotY - 10,
+            child: AnimatedBuilder(
+              animation: _pulse,
+              builder: (_, __) {
+                final t = _pulse.value;
+                return SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: Stack(alignment: Alignment.center, children: [
+                    // outer ring expands and fades
+                    Container(
+                      width: 6 + 14 * t,
+                      height: 6 + 14 * t,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: lineColor.withValues(alpha: (1 - t) * 0.35),
+                      ),
+                    ),
+                    // solid core
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: lineColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: lineColor.withValues(alpha: 0.6),
+                            blurRadius: 4,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ]),
+                );
+              },
+            ),
+          ),
+        ]);
+      }),
     );
   }
 }
