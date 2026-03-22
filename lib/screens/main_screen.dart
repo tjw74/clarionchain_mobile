@@ -39,6 +39,24 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     super.dispose();
   }
 
+  void _handleEdgeSwipe(double? velocity) {
+    if (velocity == null) return;
+    const threshold = 200.0;
+    if (velocity < -threshold && _currentPage < _pages.length - 1) {
+      _pageController.animateToPage(
+        _currentPage + 1,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    } else if (velocity > threshold && _currentPage > 0) {
+      _pageController.animateToPage(
+        _currentPage - 1,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -59,10 +77,33 @@ class _MainScreenState extends ConsumerState<MainScreen> {
 
           // Pages
           Expanded(
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (i) => setState(() => _currentPage = i),
-              children: _pages.map((p) => p.widget).toList(),
+            child: Stack(
+              children: [
+                PageView(
+                  controller: _pageController,
+                  // Disabled — edge zones below handle swipes so the chart
+                  // can own single-finger drags across the full width.
+                  physics: const NeverScrollableScrollPhysics(),
+                  onPageChanged: (i) => setState(() => _currentPage = i),
+                  children: _pages.map((p) => p.widget).toList(),
+                ),
+                // Left edge swipe zone
+                Positioned(
+                  left: 0, top: 0, bottom: 0, width: 32,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
+                  ),
+                ),
+                // Right edge swipe zone
+                Positioned(
+                  right: 0, top: 0, bottom: 0, width: 32,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onHorizontalDragEnd: (d) => _handleEdgeSwipe(d.primaryVelocity),
+                  ),
+                ),
+              ],
             ),
           ),
 
