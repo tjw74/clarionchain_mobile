@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/btc_metrics.dart';
+import '../models/exchange_tick.dart';
 import '../services/bitview_service.dart';
 
 final bitviewServiceProvider = Provider<BitviewService>((ref) {
@@ -31,6 +32,14 @@ final mempoolMetricsProvider =
     fetch: () => service.getMempoolMetrics(),
     interval: const Duration(seconds: 30),
   );
+});
+
+// --- Realized price history ---
+
+final realizedPriceHistoryProvider =
+    FutureProvider<List<PriceTick>>((ref) async {
+  final service = ref.watch(bitviewServiceProvider);
+  return service.getRealizedPriceHistory(days: 730);
 });
 
 // --- Market ---

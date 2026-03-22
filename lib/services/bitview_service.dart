@@ -154,6 +154,35 @@ class BitviewService {
   /// Fetch 2 years of daily closing prices from bitview.space.
   /// Endpoint: GET /api/metric/price_close/dateindex
   /// Response: {"total": N, "data": [float, ...]} where index 0 = Jan 3, 2009
+  /// Fetch historical realized price (USD) from bitview.space.
+  Future<List<PriceTick>> getRealizedPriceHistory({int days = 730}) async {
+    final candidates = ['realized-price', 'realized_price', 'price-realized'];
+    final genesis = DateTime.utc(2009, 1, 3);
+
+    for (final name in candidates) {
+      try {
+        final r = await _dio.get('/api/metric/$name/dateindex');
+        final body = r.data as Map<String, dynamic>;
+        final data = body['data'];
+        if (data is! List || data.isEmpty) continue;
+        final total = data.length;
+        final startIdx = (total - days).clamp(0, total);
+        final result = <PriceTick>[];
+        for (int i = startIdx; i < total; i++) {
+          final price = (data[i] as num?)?.toDouble() ?? 0.0;
+          if (price > 0) {
+            result.add(PriceTick(
+              price: price,
+              timestamp: genesis.add(Duration(days: i)),
+            ));
+          }
+        }
+        if (result.length > 10) return result;
+      } catch (_) {}
+    }
+    return [];
+  }
+
   Future<List<PriceTick>> getDailyPriceHistory({int days = 730}) async {
     try {
       final r = await _dio.get('/api/metric/price_close/dateindex');
