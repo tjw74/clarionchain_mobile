@@ -15,8 +15,23 @@ String _timeLabel(DateTime dt, double visibleDays) {
   return DateFormat('MMM yy').format(dt);
 }
 
+/// An optional overlay line on the price chart.
+class ChartOverlay {
+  final List<double?> values; // aligned with priceHistoryProvider; null = skip
+  final Color color;
+  final bool dashed;
+  final String label;
+  const ChartOverlay({
+    required this.values,
+    required this.color,
+    this.dashed = false,
+    this.label = '',
+  });
+}
+
 class PriceChart extends ConsumerStatefulWidget {
-  const PriceChart({super.key});
+  final List<ChartOverlay> overlays;
+  const PriceChart({super.key, this.overlays = const []});
 
   @override
   ConsumerState<PriceChart> createState() => _PriceChartState();
@@ -221,6 +236,27 @@ class _PriceChartState extends ConsumerState<PriceChart>
                     ),
                   ),
                 ),
+                // Overlay lines (200 DMA, realized price, etc.)
+                ...widget.overlays.map((o) {
+                  final oSpots = <FlSpot>[];
+                  for (int i = 0; i < history.length; i++) {
+                    final globalIdx = startIdx + i;
+                    if (globalIdx < o.values.length) {
+                      final v = o.values[globalIdx];
+                      if (v != null) oSpots.add(FlSpot(i.toDouble(), v));
+                    }
+                  }
+                  return LineChartBarData(
+                    spots: oSpots,
+                    isCurved: false,
+                    color: o.color,
+                    barWidth: 1.2,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    dashArray: o.dashed ? [6, 4] : null,
+                    belowBarData: BarAreaData(show: false),
+                  );
+                }),
               ],
             ),
             duration: const Duration(milliseconds: 120),

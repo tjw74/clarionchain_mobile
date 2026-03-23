@@ -217,6 +217,7 @@ class BitviewService {
     return [];
   }
 
+  /// Fetch last [days] of daily close prices. Pass a very large number for full history.
   Future<List<PriceTick>> getDailyPriceHistory({int days = 730}) async {
     try {
       final r = await _dio.get('/api/metric/price_close/dateindex');
@@ -224,7 +225,6 @@ class BitviewService {
       final data = body['data'];
       if (data is! List || data.isEmpty) return [];
 
-      // Each index = one day since Bitcoin genesis (Jan 3, 2009)
       final genesis = DateTime.utc(2009, 1, 3);
       final totalDays = data.length;
       final startIdx = (totalDays - days).clamp(0, totalDays);
@@ -244,6 +244,10 @@ class BitviewService {
       return [];
     }
   }
+
+  /// Full price history since genesis — used for z-score / quantile / MA overlays.
+  Future<List<PriceTick>> getFullPriceHistory() =>
+      getDailyPriceHistory(days: 9999);
 
   void dispose() {
     _dio.close();

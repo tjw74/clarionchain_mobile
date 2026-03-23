@@ -7,6 +7,13 @@ import '../services/bitview_service.dart';
 const _maxHistory = 25000;
 const _sampleInterval = Duration(seconds: 5);
 
+/// Full Bitcoin price history since genesis — for MA, z-score, quantile computation.
+/// Loaded once, not updated with live ticks.
+final priceHistoryDailyProvider = FutureProvider<List<PriceTick>>((ref) {
+  final svc = BitviewService();
+  return svc.getFullPriceHistory();
+});
+
 final exchangeServiceProvider = Provider<ExchangeService>((ref) {
   final service = ExchangeService();
   ref.onDispose(service.dispose);
