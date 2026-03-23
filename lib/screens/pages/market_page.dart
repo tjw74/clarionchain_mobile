@@ -5,14 +5,13 @@ import '../../providers/metrics_provider.dart';
 import '../../providers/price_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/market_chart.dart';
-import '../../widgets/stat_card.dart';
 
 final _numFmt = NumberFormat('#,##0', 'en_US');
 
 String _compactUsd(double v) {
   if (v >= 1e12) return '\$${(v / 1e12).toStringAsFixed(2)}T';
-  if (v >= 1e9) return '\$${(v / 1e9).toStringAsFixed(1)}B';
-  if (v >= 1e6) return '\$${(v / 1e6).toStringAsFixed(1)}M';
+  if (v >= 1e9)  return '\$${(v / 1e9).toStringAsFixed(1)}B';
+  if (v >= 1e6)  return '\$${(v / 1e6).toStringAsFixed(1)}M';
   return '\$${_numFmt.format(v)}';
 }
 
@@ -22,212 +21,254 @@ String _compactBtc(double v) {
   return '${v.toStringAsFixed(2)} ₿';
 }
 
+// ── Inline stat tile that expands to fill its parent ─────────────────────────
+
+class _Tile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color valueColor;
+  final String sub;
+
+  const _Tile({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+    required this.sub,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border, width: 1),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.8)),
+            const SizedBox(height: 5),
+            Text(value,
+                style: TextStyle(
+                    color: valueColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5)),
+            const SizedBox(height: 3),
+            Text(sub,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TileRow extends StatelessWidget {
+  final List<_Tile> tiles;
+  const _TileRow({required this.tiles});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Row(
+        children: tiles
+            .map<Widget>((t) => t)
+            .expand<Widget>((w) => [w, const SizedBox(width: 8)])
+            .toList()
+          ..removeLast(),
+      ),
+    );
+  }
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 class MarketPage extends ConsumerWidget {
   const MarketPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final marketAsync = ref.watch(marketMetricsProvider);
-    final priceState = ref.watch(priceStateProvider);
-    final priceHistory = ref.watch(priceHistoryProvider);
-    final realizedAsync = ref.watch(realizedPriceHistoryProvider);
+    final marketAsync    = ref.watch(marketMetricsProvider);
+    final priceState     = ref.watch(priceStateProvider);
+    final priceHistory   = ref.watch(priceHistoryProvider);
+    final realizedAsync  = ref.watch(realizedPriceHistoryProvider);
+
+    // Pull realized price from history provider (more reliable than market metrics)
+    final realizedHistory = realizedAsync.valueOrNull ?? [];
+    final realizedPrice   = realizedHistory.isNotEmpty
+        ? realizedHistory.last.price : 0.0;
+
+    final livePrice = priceState.vwap;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
 
-          // Header
-          const Row(children: [
-            Icon(Icons.pie_chart_outline_rounded,
-                color: AppColors.btcOrange, size: 20),
-            SizedBox(width: 8),
-            Text(
-              'MARKET',
+        // ── Header ───────────────────────────────────────────────────────────
+        Row(children: [
+          const Icon(Icons.pie_chart_outline_rounded,
+              color: AppColors.btcOrange, size: 18),
+          const SizedBox(width: 8),
+          const Text('MARKET',
               style: TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ]),
+                  color: AppColors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2)),
+          const SizedBox(width: 14),
+          // Legend
+          _dot(AppColors.positive),
+          const SizedBox(width: 4),
+          const Text('Price',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+          const SizedBox(width: 10),
+          _dash(AppColors.btcOrange),
+          const SizedBox(width: 4),
+          const Text('Realized',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+        ]),
 
-          const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
-          // Chart
-          SizedBox(
-            height: 220,
-            child: Stack(children: [
-              realizedAsync.when(
-                loading: () => MarketChart(
-                  priceHistory: priceHistory,
-                  realizedHistory: const [],
-                ),
-                error: (_, __) => MarketChart(
-                  priceHistory: priceHistory,
-                  realizedHistory: const [],
-                ),
-                data: (realized) => MarketChart(
-                  priceHistory: priceHistory,
-                  realizedHistory: realized,
-                ),
-              ),
-              // Legend
-              Positioned(
-                top: 6,
-                left: 6,
-                child: Row(children: [
-                  _legendDot(AppColors.positive),
-                  const SizedBox(width: 4),
-                  const Text('Price',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 10)),
-                  const SizedBox(width: 12),
-                  _legendDash(AppColors.btcOrange),
-                  const SizedBox(width: 4),
-                  const Text('Realized',
-                      style: TextStyle(
-                          color: AppColors.textSecondary, fontSize: 10)),
-                ]),
-              ),
-            ]),
+        // ── Chart ────────────────────────────────────────────────────────────
+        Expanded(
+          flex: 5,
+          child: realizedAsync.when(
+            loading: () => MarketChart(
+                priceHistory: priceHistory, realizedHistory: const []),
+            error: (_, __) => MarketChart(
+                priceHistory: priceHistory, realizedHistory: const []),
+            data: (realized) => MarketChart(
+                priceHistory: priceHistory, realizedHistory: realized),
           ),
+        ),
 
-          const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
-          // Stats
-          Expanded(
-            child: marketAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(
-                    color: AppColors.btcOrange, strokeWidth: 2),
-              ),
-              error: (_, __) => const Center(
-                child: Text('Could not load market data',
-                    style: TextStyle(color: AppColors.textSecondary)),
-              ),
-              data: (m) {
-                final price = priceState.vwap;
-                final liveMarketCap = price > 0 && m.circulatingSupply > 0
-                    ? price * m.circulatingSupply
-                    : m.marketCapUsd;
+        // ── Stats ─────────────────────────────────────────────────────────
+        marketAsync.when(
+          loading: () => const Expanded(
+            flex: 4,
+            child: Center(child: CircularProgressIndicator(
+                color: AppColors.btcOrange, strokeWidth: 2)),
+          ),
+          error: (_, __) => const Expanded(
+            flex: 4,
+            child: Center(child: Text('Could not load market data',
+                style: TextStyle(color: AppColors.textSecondary))),
+          ),
+          data: (m) {
+            final price = livePrice > 0 ? livePrice : m.marketCapUsd /
+                (m.circulatingSupply > 0 ? m.circulatingSupply : 1);
 
-                final realizedPrice = m.circulatingSupply > 0 && m.realizedCapUsd > 0
-                    ? m.realizedCapUsd / m.circulatingSupply
-                    : 0.0;
+            final marketCap = price > 0 && m.circulatingSupply > 0
+                ? price * m.circulatingSupply : m.marketCapUsd;
 
-                final premium = realizedPrice > 0 && price > 0
-                    ? ((price - realizedPrice) / realizedPrice * 100)
-                    : 0.0;
+            // Compute realized cap from realized price × supply
+            final realizedCap = realizedPrice > 0 && m.circulatingSupply > 0
+                ? realizedPrice * m.circulatingSupply : m.realizedCapUsd;
 
-                final mvrvColor = m.mvrv > 3.5
-                    ? AppColors.negative
-                    : m.mvrv < 1.0
-                        ? AppColors.positive
-                        : AppColors.textPrimary;
+            final mvrv = realizedPrice > 0 && price > 0
+                ? price / realizedPrice : m.mvrv;
 
-                final premiumColor = premium >= 0
+            final premium = realizedPrice > 0 && price > 0
+                ? (price - realizedPrice) / realizedPrice * 100 : 0.0;
+
+            final mvrvColor = mvrv > 3.5
+                ? AppColors.negative
+                : mvrv < 1.0
                     ? AppColors.positive
-                    : AppColors.negative;
+                    : AppColors.textPrimary;
 
-                return SingleChildScrollView(
-                  child: Column(children: [
-                    // Market cap + Realized cap
-                    StatRow(cards: [
-                      StatCard(
-                        label: 'Market Cap',
-                        icon: Icons.monetization_on_outlined,
-                        value: _compactUsd(liveMarketCap),
-                        subValue: 'Live · ${_compactBtc(m.circulatingSupply)}',
-                        compact: true,
-                      ),
-                      StatCard(
-                        label: 'Realized Cap',
-                        icon: Icons.account_balance_wallet_outlined,
-                        value: _compactUsd(m.realizedCapUsd),
-                        subValue: 'Aggregate cost basis',
-                        compact: true,
-                      ),
-                    ]),
+            return Expanded(
+              flex: 4,
+              child: Column(children: [
+                _TileRow(tiles: [
+                  _Tile(
+                    label: 'MARKET CAP',
+                    value: _compactUsd(marketCap),
+                    valueColor: AppColors.textPrimary,
+                    sub: 'Live · ${_compactBtc(m.circulatingSupply)}',
+                  ),
+                  _Tile(
+                    label: 'REALIZED CAP',
+                    value: realizedCap > 0 ? _compactUsd(realizedCap) : '—',
+                    valueColor: AppColors.textPrimary,
+                    sub: 'Aggregate cost basis',
+                  ),
+                ]),
 
-                    const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-                    // MVRV + Premium
-                    StatRow(cards: [
-                      StatCard(
-                        label: 'MVRV Ratio',
-                        icon: Icons.show_chart_rounded,
-                        value: m.mvrv > 0 ? m.mvrv.toStringAsFixed(2) : '—',
-                        valueColor: m.mvrv > 0 ? mvrvColor : null,
-                        subValue: m.mvrv > 3.5
-                            ? 'Historically overvalued'
-                            : m.mvrv > 0 && m.mvrv < 1.0
-                                ? 'Historically undervalued'
-                                : 'Fair value range',
-                        compact: true,
-                      ),
-                      StatCard(
-                        label: 'Price Premium',
-                        icon: Icons.trending_up_rounded,
-                        value: realizedPrice > 0
-                            ? '${premium >= 0 ? '+' : ''}${premium.toStringAsFixed(1)}%'
-                            : '—',
-                        valueColor: realizedPrice > 0 ? premiumColor : null,
-                        subValue: 'vs realized price',
-                        compact: true,
-                      ),
-                    ]),
+                _TileRow(tiles: [
+                  _Tile(
+                    label: 'MVRV RATIO',
+                    value: mvrv > 0 ? mvrv.toStringAsFixed(2) : '—',
+                    valueColor: mvrv > 0 ? mvrvColor : AppColors.textPrimary,
+                    sub: mvrv > 3.5
+                        ? 'Historically overvalued'
+                        : mvrv > 0 && mvrv < 1.0
+                            ? 'Historically undervalued'
+                            : 'Fair value range',
+                  ),
+                  _Tile(
+                    label: 'PRICE PREMIUM',
+                    value: realizedPrice > 0
+                        ? '${premium >= 0 ? '+' : ''}${premium.toStringAsFixed(1)}%'
+                        : '—',
+                    valueColor: premium >= 0 ? AppColors.positive : AppColors.negative,
+                    sub: 'vs realized price',
+                  ),
+                ]),
 
-                    const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-                    // Realized price + Supply
-                    StatRow(cards: [
-                      StatCard(
-                        label: 'Realized Price',
-                        icon: Icons.price_check_rounded,
-                        value: realizedPrice > 0
-                            ? '\$${_numFmt.format(realizedPrice.round())}'
-                            : '—',
-                        subValue: 'Avg acquisition cost',
-                        compact: true,
-                      ),
-                      StatCard(
-                        label: 'Supply Mined',
-                        icon: Icons.percent_rounded,
-                        value:
-                            '${(m.circulatingSupply / 21000000 * 100).toStringAsFixed(2)}%',
-                        subValue:
-                            '${_compactBtc(m.circulatingSupply)} of 21M',
-                        compact: true,
-                      ),
-                    ]),
+                _TileRow(tiles: [
+                  _Tile(
+                    label: 'REALIZED PRICE',
+                    value: realizedPrice > 0
+                        ? '\$${_numFmt.format(realizedPrice.round())}'
+                        : '—',
+                    valueColor: AppColors.btcOrange,
+                    sub: 'Avg acquisition cost',
+                  ),
+                  _Tile(
+                    label: 'SUPPLY MINED',
+                    value:
+                        '${(m.circulatingSupply / 21000000 * 100).toStringAsFixed(2)}%',
+                    valueColor: AppColors.textPrimary,
+                    sub: '${_compactBtc(m.circulatingSupply)} of 21M',
+                  ),
+                ]),
 
-                    const SizedBox(height: 16),
-                  ]),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
+                const SizedBox(height: 12),
+              ]),
+            );
+          },
+        ),
+      ]),
     );
   }
 
-  Widget _legendDot(Color color) => Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+  static Widget _dot(Color color) => Container(
+      width: 8, height: 8,
+      decoration: BoxDecoration(color: color, shape: BoxShape.circle));
 
-  Widget _legendDash(Color color) => Container(
-        width: 16,
-        height: 2,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(1),
-        ),
-      );
+  static Widget _dash(Color color) => Container(
+      width: 14, height: 2,
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(1)));
 }
