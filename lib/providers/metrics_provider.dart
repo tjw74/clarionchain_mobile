@@ -45,19 +45,19 @@ final realizedPriceHistoryProvider =
 // --- P&L history ---
 
 final unrealizedProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
-    ref.watch(bitviewServiceProvider).getUnrealizedProfitHistory());
+    ref.watch(bitviewServiceProvider).getUnrealizedProfitHistory(days: 9999));
 
 final unrealizedLossProvider = FutureProvider<List<PriceTick>>((ref) async =>
-    ref.watch(bitviewServiceProvider).getUnrealizedLossHistory());
+    ref.watch(bitviewServiceProvider).getUnrealizedLossHistory(days: 9999));
 
 final realizedProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
-    ref.watch(bitviewServiceProvider).getRealizedProfitHistory());
+    ref.watch(bitviewServiceProvider).getRealizedProfitHistory(days: 9999));
 
 final realizedLossProvider = FutureProvider<List<PriceTick>>((ref) async =>
-    ref.watch(bitviewServiceProvider).getRealizedLossHistory());
+    ref.watch(bitviewServiceProvider).getRealizedLossHistory(days: 9999));
 
 final supplyInProfitProvider = FutureProvider<List<PriceTick>>((ref) async =>
-    ref.watch(bitviewServiceProvider).getSupplyInProfitHistory());
+    ref.watch(bitviewServiceProvider).getSupplyInProfitHistory(days: 9999));
 
 // --- Market ---
 
