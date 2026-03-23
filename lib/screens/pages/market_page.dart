@@ -84,6 +84,7 @@ class _TileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: tiles
             .map<Widget>((t) => t)
             .expand<Widget>((w) => [w, const SizedBox(width: 8)])
