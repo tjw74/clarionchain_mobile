@@ -6,12 +6,19 @@ import '../providers/price_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/chart_axis_labels.dart';
 
-String _timeLabel(DateTime dt, double visibleDays) {
-  if (visibleDays <= 1) return DateFormat('HH:mm').format(dt);
-  if (visibleDays <= 7) return DateFormat('EEE').format(dt);
-  if (visibleDays <= 60) return DateFormat('MMM d').format(dt);
-  if (visibleDays <= 365) return DateFormat('MMM').format(dt);
-  return DateFormat('MMM yy').format(dt);
+/// Few x-axis ticks so labels stay distinct (avoids repeated “Mar 24” from fl_chart).
+List<int> _xAxisLabelIndices(int len) {
+  if (len <= 1) return [0];
+  if (len <= 6) return List.generate(len, (i) => i);
+  return [0, len ~/ 4, len ~/ 2, (3 * len) ~/ 4, len - 1];
+}
+
+String _bottomAxisDateLabel(DateTime dt, double spanDays) {
+  if (spanDays <= 1) return DateFormat('HH:mm').format(dt);
+  if (spanDays <= 7) return DateFormat('EEE d').format(dt);
+  if (spanDays <= 120) return DateFormat('MMM d').format(dt);
+  // Multi-month / years: always include year so ticks don’t collide.
+  return DateFormat('MMM \'yy').format(dt);
 }
 
 /// An optional overlay line on the price chart.
@@ -30,7 +37,9 @@ class ChartOverlay {
 
 class PriceChart extends ConsumerStatefulWidget {
   final List<ChartOverlay> overlays;
-  const PriceChart({super.key, this.overlays = const []});
+  /// Optional compact label (e.g. live spot) drawn inside the chart area.
+  final Widget? overlayHeader;
+  const PriceChart({super.key, this.overlays = const [], this.overlayHeader});
 
   @override
   ConsumerState<PriceChart> createState() => _PriceChartState();
@@ -76,7 +85,7 @@ class _PriceChartState extends ConsumerState<PriceChart>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(
-                color: AppColors.btcOrange, strokeWidth: 2),
+                color: AppColors.accent, strokeWidth: 2),
             const SizedBox(height: 12),
             Text(
               loading ? 'Loading price history…' : 'Connecting to exchanges…',
@@ -108,9 +117,10 @@ class _PriceChartState extends ConsumerState<PriceChart>
 
     final isUp = history.last.price >= history.first.price;
     final lineColor = isUp ? AppColors.positive : AppColors.negative;
+    final dotCore = AppColors.accent;
     final vc = history.length;
-    final labelInterval = (vc / 4).floorToDouble().clamp(1.0, double.infinity);
-    final visibleDays =
+    final labelIdx = _xAxisLabelIndices(vc).toSet();
+    final spanDays =
         history.last.timestamp.difference(history.first.timestamp).inMinutes /
             1440.0;
 
@@ -195,16 +205,17 @@ class _PriceChartState extends ConsumerState<PriceChart>
                   sideTitles: SideTitles(
                     showTitles: true,
                     reservedSize: bottomReserved,
-                    interval: labelInterval,
+                    interval: 1,
                     getTitlesWidget: (value, meta) {
-                      final idx = value.toInt();
-                      if (idx < 0 || idx >= history.length) {
+                      final idx = value.round().clamp(0, history.length - 1);
+                      if (!labelIdx.contains(idx)) {
                         return const SizedBox.shrink();
                       }
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          _timeLabel(history[idx].timestamp, visibleDays),
+                          _bottomAxisDateLabel(
+                              history[idx].timestamp, spanDays),
                           style: const TextStyle(
                               color: AppColors.textMuted, fontSize: 9),
                         ),
@@ -261,6 +272,14 @@ class _PriceChartState extends ConsumerState<PriceChart>
             curve: Curves.easeOut,
           ),
 
+          if (widget.overlayHeader != null)
+            Positioned(
+              left: 0,
+              top: 0,
+              right: rightReserved,
+              child: widget.overlayHeader!,
+            ),
+
           // ── Pulsing live-price dot ──────────────────────────
           Positioned(
             left: dotX - 10,
@@ -279,19 +298,19 @@ class _PriceChartState extends ConsumerState<PriceChart>
                       height: 6 + 14 * t,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: lineColor.withValues(alpha: (1 - t) * 0.35),
+                        color: dotCore.withValues(alpha: (1 - t) * 0.28),
                       ),
                     ),
-                    // solid core
+                    // solid core (accent blue — visible on green/red line)
                     Container(
                       width: 6,
                       height: 6,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: lineColor,
+                        color: dotCore,
                         boxShadow: [
                           BoxShadow(
-                            color: lineColor.withValues(alpha: 0.6),
+                            color: dotCore.withValues(alpha: 0.45),
                             blurRadius: 4,
                             spreadRadius: 1,
                           ),

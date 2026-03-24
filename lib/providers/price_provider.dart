@@ -47,8 +47,8 @@ final btcDailyChangeVsPriorClosePctProvider = Provider<double?>((ref) {
   );
 });
 
-/// Last [chartDailyWindow] daily closes from full history, with **live VWAP on the last bar**.
-/// No extra “tick” rows — indices stay aligned with daily SMA/WMA overlays.
+/// Rolling **~2 years** of daily closes from Bitview (`getFullPriceHistory` tail),
+/// with **live VWAP on the last bar**. No extra tick rows — aligned with overlays.
 const chartDailyWindow = 730;
 
 final chartDailyPriceHistoryProvider = Provider<List<PriceTick>>((ref) {

@@ -196,11 +196,17 @@ class _TopBar extends ConsumerWidget {
       child: Row(children: [
         // Logo (transparent outer ring; clip to circle)
         ClipOval(
-          child: Image.asset(
-            'assets/clarionchain_logo.png',
-            width: 24,
-            height: 24,
-            fit: BoxFit.cover,
+          child: ColorFiltered(
+            colorFilter: const ColorFilter.mode(
+              AppColors.accent,
+              BlendMode.srcIn,
+            ),
+            child: Image.asset(
+              'assets/clarionchain_logo.png',
+              width: 24,
+              height: 24,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
         const SizedBox(width: 8),

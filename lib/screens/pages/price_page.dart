@@ -26,9 +26,16 @@ class PricePage extends ConsumerWidget {
     // ── Overlay computation ──────────────────────────────────────────────────
     final dailyPrices =
         dailyAsync.valueOrNull?.map((t) => t.price).toList() ?? [];
-    final dma200 = dailyPrices.isNotEmpty ? sma(dailyPrices, 200) : <double?>[];
+    final chartPrices = chartHistory.map((t) => t.price).toList();
+    // Full Bitview series when ready; else ~2Y window so stats aren’t all "—"
+    final pricesForStats =
+        dailyPrices.isNotEmpty ? dailyPrices : chartPrices;
+
+    final dma200 = pricesForStats.length >= 200
+        ? sma(pricesForStats, 200)
+        : <double?>[];
     final wma200 =
-        dailyPrices.length >= 1400 ? wma(dailyPrices, 1400) : <double?>[];
+        pricesForStats.length >= 1400 ? wma(pricesForStats, 1400) : <double?>[];
 
     // Realized price aligned to same length as daily
     final realizedHistory = realizedAsync.valueOrNull ?? [];
@@ -45,12 +52,11 @@ class PricePage extends ConsumerWidget {
         .toList();
 
     final chartLen = chartHistory.length;
-    final totalDaily = dailyHistory.length;
     List<double?> tailAlign(List<double?> full) {
       if (full.isEmpty || chartLen == 0) {
         return List<double?>.filled(chartLen, null);
       }
-      if (totalDaily >= chartLen) return full.sublist(totalDaily - chartLen);
+      if (full.length >= chartLen) return full.sublist(full.length - chartLen);
       return List<double?>.filled(chartLen, null);
     }
 
@@ -72,34 +78,35 @@ class PricePage extends ConsumerWidget {
     final currentRealized = realizedHistory.isNotEmpty ? realizedHistory.last.price : 0.0;
     final mvrv = currentRealized > 0 && price > 0 ? price / currentRealized : 0.0;
 
-    final pQuantile = dailyPrices.isNotEmpty
-        ? quantile(dailyPrices, price)
+    final pQuantile = pricesForStats.isNotEmpty
+        ? quantile(pricesForStats, price)
         : 0.0;
-    final pZScore = dailyPrices.isNotEmpty ? logZScore(dailyPrices, price) : 0.0;
-    final hasPZ = dailyPrices.isNotEmpty;
+    final pZScore =
+        pricesForStats.isNotEmpty ? logZScore(pricesForStats, price) : 0.0;
+    final hasPZ = pricesForStats.isNotEmpty;
 
-    // 24h change
-    double? change24h;
+    // Window change over visible ~2Y chart
+    double? changeWindow;
     if (chartHistory.length >= 2) {
       final oldest = chartHistory.first.price;
       final newest = chartHistory.last.price;
-      if (oldest > 0) change24h = (newest - oldest) / oldest;
+      if (oldest > 0) changeWindow = (newest - oldest) / oldest;
     }
     final changeColor =
-        (change24h ?? 0) >= 0 ? AppColors.positive : AppColors.negative;
+        (changeWindow ?? 0) >= 0 ? AppColors.positive : AppColors.negative;
 
     // Mayer color
     final mayerColor = mayer > 2.4
         ? AppColors.negative
         : mayer > 0 && mayer < 1.0
-            ? const Color(0xFF6B8EFF)
+            ? AppColors.accent
             : AppColors.textPrimary;
 
     // MVRV color
     final mvrvColor = mvrv > 3.5
         ? AppColors.negative
         : mvrv > 0 && mvrv < 1.0
-            ? const Color(0xFF6B8EFF)
+            ? AppColors.accent
             : AppColors.textPrimary;
 
     // Overlays for the chart (indices match chartDailyPriceHistoryProvider)
@@ -120,7 +127,7 @@ class PricePage extends ConsumerWidget {
       if (realizedChart.any((v) => v != null))
         ChartOverlay(
           values: realizedChart,
-          color: AppColors.btcOrange.withValues(alpha: 0.8),
+          color: AppColors.accentSecondary.withValues(alpha: 0.9),
           dashed: true,
           label: 'Realized',
         ),
@@ -131,53 +138,48 @@ class PricePage extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
 
-          // Price header
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('BTC / USD',
-                  style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      letterSpacing: 1.0,
-                      fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(
-                price > 0 ? '\$${_priceFmt.format(price)}' : '—',
-                style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -1),
+          // Compact spot + chart window (~2Y)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Text(
+                'BTC / USD',
+                style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 11,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w600),
               ),
-            ]),
-            const Spacer(),
-            if (change24h != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: changeColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(_pctFmt.format(change24h),
+              const Spacer(),
+              if (changeWindow != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: changeColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '${_pctFmt.format(changeWindow)} · 2Y',
                     style: TextStyle(
                         color: changeColor,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14)),
-              ),
-          ]),
-
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11),
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 2),
           Text(
             priceState.hasData
-                ? '${priceState.ticks.length} exchange${priceState.ticks.length != 1 ? 's' : ''} · VWAP'
+                ? '${priceState.ticks.length} exchange${priceState.ticks.length != 1 ? 's' : ''} · VWAP spot · chart ≈2Y daily (Bitview)'
                 : 'Connecting…',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
           ),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
 
           // Overlay legend
           if (overlays.isNotEmpty)
@@ -195,10 +197,37 @@ class PricePage extends ConsumerWidget {
               ],
             ]),
 
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
 
-          // Chart
-          Expanded(child: PriceChart(overlays: overlays)),
+          // Chart (~2Y daily + live last bar)
+          Expanded(
+            child: PriceChart(
+              overlays: overlays,
+              overlayHeader: price > 0
+                  ? Row(
+                      children: [
+                        Text(
+                          'Live spot',
+                          style: TextStyle(
+                              color: AppColors.textMuted,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.4),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '\$${_priceFmt.format(price)}',
+                          style: const TextStyle(
+                            color: AppColors.accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    )
+                  : null,
+            ),
+          ),
 
           const SizedBox(height: 10),
 
@@ -241,7 +270,7 @@ class PricePage extends ConsumerWidget {
               valueColor: pZScore > 3
                   ? AppColors.negative
                   : pZScore < -1
-                      ? const Color(0xFF6B8EFF)
+                      ? AppColors.accent
                       : AppColors.textPrimary,
               subValue: pZScore > 3
                   ? 'Extreme — historic tops'
@@ -279,7 +308,9 @@ class PricePage extends ConsumerWidget {
                   ? price > currentDma
                       ? '+${((price / currentDma - 1) * 100).toStringAsFixed(1)}% above'
                       : '${((price / currentDma - 1) * 100).toStringAsFixed(1)}% below'
-                  : 'Loading…',
+                  : dailyAsync.isLoading
+                      ? 'Loading history…'
+                      : 'Need ≥200 daily closes',
               compact: true,
             ),
             StatCard(
@@ -292,7 +323,9 @@ class PricePage extends ConsumerWidget {
                   ? price > currentRealized
                       ? '+${((price / currentRealized - 1) * 100).toStringAsFixed(1)}% premium'
                       : '${((price / currentRealized - 1) * 100).toStringAsFixed(1)}% discount'
-                  : 'Avg acquisition cost',
+                  : realizedAsync.isLoading
+                      ? 'Loading on-chain…'
+                      : 'Avg acquisition cost',
               compact: true,
             ),
           ]),

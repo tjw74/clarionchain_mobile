@@ -7,14 +7,24 @@ class AppColors {
   static const surfaceElevated = Color(0xFF1A1A26);
   static const border = Color(0xFF1E1E2E);
 
-  static const btcOrange = Color(0xFFF7931A);
-  static const positive = Color(0xFF00D4AA);
-  static const negative = Color(0xFFFF4444);
+  /// Grafana-style blue — primary accent, “attention”, nav (replaces harsh orange).
+  static const grafanaBlue = Color(0xFF5794F2);
+  /// Muted Grafana yellow — secondary highlights only (easy on the eyes).
+  static const grafanaYellow = Color(0xFFC9A25D);
+
+  /// Primary UI accent (same as [grafanaBlue]). Legacy name kept for call sites.
+  static const btcOrange = grafanaBlue;
+  static const accent = grafanaBlue;
+  static const accentSecondary = grafanaYellow;
+
+  /// Softer up/down than neon (dark UI).
+  static const positive = Color(0xFF2EB88A);
+  static const negative = Color(0xFFD96A6A);
   static const neutral = Color(0xFF8A8A9A);
 
-  static const textPrimary = Color(0xFFFFFFFF);
+  static const textPrimary = Color(0xFFE8E8EE);
   static const textSecondary = Color(0xFF8A8A9A);
-  static const textMuted = Color(0xFF4A4A5A);
+  static const textMuted = Color(0xFF5A5A6A);
 }
 
 class AppTheme {
@@ -24,7 +34,7 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
       colorScheme: const ColorScheme.dark(
-        primary: AppColors.btcOrange,
+        primary: AppColors.accent,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
       ),
