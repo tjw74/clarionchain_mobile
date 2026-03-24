@@ -26,18 +26,9 @@ android {
         versionName flutter.versionName
     }
 
-    signingConfigs {
-        release {
-            keyAlias System.getenv("KEY_ALIAS") ?: "clarionchain"
-            keyPassword System.getenv("KEY_PASSWORD") ?: "clarionchain2024"
-            storeFile file(System.getenv("KEYSTORE_PATH") ?: "keystore.jks")
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "clarionchain2024"
-        }
-    }
-
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            signingConfig signingConfigs.debug
             minifyEnabled true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
