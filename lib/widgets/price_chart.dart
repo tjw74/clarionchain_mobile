@@ -61,22 +61,42 @@ class _PriceChartState extends ConsumerState<PriceChart>
   @override
   Widget build(BuildContext context) {
     final allHistory = ref.watch(chartDailyPriceHistoryProvider);
-    final loading = ref.watch(historyLoadingProvider);
+    final dailyAsync = ref.watch(priceHistoryDailyProvider);
+    final notifierLoading = ref.watch(historyLoadingProvider);
 
     if (allHistory.isEmpty) {
+      final loading = dailyAsync.isLoading || notifierLoading;
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(
-                color: AppColors.accent, strokeWidth: 2),
-            const SizedBox(height: 12),
-            Text(
-              loading ? 'Loading price history…' : 'Connecting to exchanges…',
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (loading) ...[
+                const CircularProgressIndicator(
+                    color: AppColors.accent, strokeWidth: 2),
+                const SizedBox(height: 12),
+                const Text(
+                  'Loading daily prices from Bitview…',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppColors.textSecondary, fontSize: 13),
+                ),
+              ] else ...[
+                const Icon(Icons.cloud_off_rounded,
+                    color: AppColors.textMuted, size: 40),
+                const SizedBox(height: 12),
+                Text(
+                  dailyAsync.hasError
+                      ? 'Bitview price data failed to load.'
+                      : 'No daily price data. Check network / VPN and try again.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 13),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
@@ -175,7 +195,7 @@ class _PriceChartState extends ConsumerState<PriceChart>
                         return const SizedBox.shrink();
                       }
                       return Text(
-                        formatAxisUsdCompact(value),
+                        formatAxisUsdForRange(value, meta.min, meta.max),
                         style: const TextStyle(
                             color: AppColors.textMuted, fontSize: 9),
                         textAlign: TextAlign.right,

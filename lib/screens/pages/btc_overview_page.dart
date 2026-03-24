@@ -126,6 +126,30 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage>
 
     final overlayDma200 = tailAlign(dma200);
 
+    Widget chartBody;
+    if (dailyAsync.isLoading && history.isEmpty) {
+      chartBody = const Center(
+        child: CircularProgressIndicator(
+            color: AppColors.accent, strokeWidth: 2),
+      );
+    } else if (history.isEmpty) {
+      chartBody = Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            dailyAsync.hasError
+                ? 'Bitview daily prices failed to load.'
+                : 'No daily price data. Check network / VPN and reopen the app.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 13, height: 1.4),
+          ),
+        ),
+      );
+    } else {
+      chartBody = _buildChart(context, history, overlayDma200);
+    }
+
     return CategoryPageLayout(
       header: const CategoryPageHeader(
         category: 'BTC',
@@ -133,7 +157,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage>
         accentColor: AppColors.accent,
         trailingHint: 'Spot vs on-chain',
       ),
-      chart: _buildChart(context, history, overlayDma200),
+      chart: chartBody,
       stats: _buildStats(
         mayer,
         mayerColor,
@@ -281,7 +305,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage>
                             return const SizedBox.shrink();
                           }
                           return Text(
-                            formatAxisUsdCompact(value),
+                            formatAxisUsdForRange(value, meta.min, meta.max),
                             style: const TextStyle(
                                 color: AppColors.textMuted, fontSize: 9),
                             textAlign: TextAlign.right,

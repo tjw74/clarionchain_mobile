@@ -4,9 +4,6 @@ import '../models/exchange_tick.dart';
 import '../services/exchange_service.dart';
 import '../services/bitview_service.dart';
 
-const _maxHistory = 25000;
-const _sampleInterval = Duration(seconds: 5);
-
 /// Full Bitcoin price history since genesis — for MA, z-score, quantile computation.
 /// Loaded once, not updated with live ticks.
 final priceHistoryDailyProvider = FutureProvider<List<PriceTick>>((ref) {
@@ -48,8 +45,28 @@ final btcDailyChangeVsPriorClosePctProvider = Provider<double?>((ref) {
 });
 
 /// Rolling **~2 years** of daily closes from Bitview (`getFullPriceHistory` tail),
-/// with **live VWAP on the last bar**. No extra tick rows — aligned with overlays.
+/// with **live VWAP on the last bar**. Never uses live tick spam (sub-minute) as chart data.
 const chartDailyWindow = 730;
+
+/// True if this series spans enough calendar time to be daily (or multi-day) history.
+bool chartHistoryLooksLikeDailySeries(List<PriceTick> h) {
+  if (h.length < 2) return false;
+  final spanDays =
+      h.last.timestamp.difference(h.first.timestamp).inDays.abs();
+  return spanDays >= 14;
+}
+
+List<PriceTick> _sliceChartWindow(List<PriceTick> daily, double liveVwap) {
+  final n = daily.length;
+  final start = n > chartDailyWindow ? n - chartDailyWindow : 0;
+  final slice = List<PriceTick>.from(daily.sublist(start));
+  if (liveVwap > 0 && slice.isNotEmpty) {
+    final last = slice.last;
+    slice[slice.length - 1] =
+        PriceTick(price: liveVwap, timestamp: last.timestamp);
+  }
+  return slice;
+}
 
 final chartDailyPriceHistoryProvider = Provider<List<PriceTick>>((ref) {
   final dailyAsync = ref.watch(priceHistoryDailyProvider);
@@ -58,18 +75,15 @@ final chartDailyPriceHistoryProvider = Provider<List<PriceTick>>((ref) {
 
   final daily = dailyAsync.valueOrNull;
   if (daily != null && daily.isNotEmpty) {
-    final n = daily.length;
-    final start = n > chartDailyWindow ? n - chartDailyWindow : 0;
-    final slice = List<PriceTick>.from(daily.sublist(start));
-    if (live > 0 && slice.isNotEmpty) {
-      final last = slice.last;
-      slice[slice.length - 1] =
-          PriceTick(price: live, timestamp: last.timestamp);
-    }
-    return slice;
+    return _sliceChartWindow(daily, live);
   }
 
-  return fallback;
+  // Same Bitview daily endpoint as Notifier (730), without tick pollution — only if multi-week span.
+  if (chartHistoryLooksLikeDailySeries(fallback)) {
+    return _sliceChartWindow(fallback, live);
+  }
+
+  return [];
 });
 
 class PriceStateNotifier extends StateNotifier<PriceState> {
@@ -100,13 +114,9 @@ final priceHistoryProvider =
 
 class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
   final Ref _ref;
-  StreamSubscription<ExchangeTick>? _sub;
-  DateTime? _lastSample;
-  DateTime? _historyEnd;
 
   PriceHistoryNotifier(this._ref) : super([]) {
     _loadHistory();
-    _sub = _ref.read(exchangeServiceProvider).ticks.listen(_onTick);
   }
 
   Future<void> _loadHistory() async {
@@ -116,7 +126,6 @@ class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
       final history = await bitview.getDailyPriceHistory(days: 730);
       if (mounted && history.isNotEmpty) {
         state = history;
-        _historyEnd = history.last.timestamp;
       }
     } catch (_) {}
     if (mounted) {
@@ -124,30 +133,5 @@ class PriceHistoryNotifier extends StateNotifier<List<PriceTick>> {
     }
   }
 
-  void _onTick(ExchangeTick tick) {
-    final now = DateTime.now();
-    if (_lastSample != null && now.difference(_lastSample!) < _sampleInterval) return;
-    final priceState = _ref.read(priceStateProvider);
-    if (!priceState.hasData) return;
-    _lastSample = now;
-
-    final newTick = PriceTick(price: priceState.vwap, timestamp: now);
-    // Don't append if within 12h of last historical daily point (avoid duplicates)
-    if (_historyEnd != null &&
-        newTick.timestamp.isBefore(_historyEnd!.add(const Duration(hours: 12)))) {
-      return;
-    }
-
-    final history = [...state, newTick];
-    state = history.length > _maxHistory
-        ? history.sublist(history.length - _maxHistory)
-        : history;
-  }
-
-  @override
-  void dispose() {
-    _sub?.cancel();
-    super.dispose();
-  }
 }
 

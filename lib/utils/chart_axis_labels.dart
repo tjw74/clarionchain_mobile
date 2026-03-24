@@ -30,6 +30,21 @@ String bottomAxisDateLabel(DateTime dt, double spanDays) {
   return (dataMin - pad, dataMax + pad);
 }
 
+/// Y-axis labels: when price range is tiny, [formatAxisUsdCompact] rounds everything to the same "70.7K".
+String formatAxisUsdForRange(double v, double axisMin, double axisMax) {
+  final mid = ((axisMin + axisMax) / 2).abs();
+  final span = (axisMax - axisMin).abs();
+  if (mid > 1e-9 && span / mid < 0.003) {
+    final a = v.abs();
+    final sign = v < 0 ? '-' : '';
+    if (a >= 1e3) {
+      return '$sign\$${(a / 1e3).toStringAsFixed(2)}K';
+    }
+    return '$sign\$${a.toStringAsFixed(0)}';
+  }
+  return formatAxisUsdCompact(v);
+}
+
 /// Compact Y-axis labels for mobile charts (short form, minimal width).
 String formatAxisUsdCompact(double v) {
   final a = v.abs();
