@@ -16,7 +16,7 @@ String _timeLabel(DateTime dt, double visibleDays) {
 
 /// An optional overlay line on the price chart.
 class ChartOverlay {
-  final List<double?> values; // aligned with priceHistoryProvider; null = skip
+  final List<double?> values; // aligned with chartDailyPriceHistoryProvider; null = skip
   final Color color;
   final bool dashed;
   final String label;
@@ -67,7 +67,7 @@ class _PriceChartState extends ConsumerState<PriceChart>
 
   @override
   Widget build(BuildContext context) {
-    final allHistory = ref.watch(priceHistoryProvider);
+    final allHistory = ref.watch(chartDailyPriceHistoryProvider);
     final loading = ref.watch(historyLoadingProvider);
 
     if (allHistory.isEmpty) {

@@ -33,7 +33,7 @@ class _EtfOverviewPageState extends ConsumerState<EtfOverviewPage> {
 
   @override
   Widget build(BuildContext context) {
-    final history = ref.watch(priceHistoryProvider);
+    final history = ref.watch(chartDailyPriceHistoryProvider);
 
     final ibitAsync = ref.watch(stockQuoteProvider('IBIT'));
     final fbtcAsync = ref.watch(stockQuoteProvider('FBTC'));

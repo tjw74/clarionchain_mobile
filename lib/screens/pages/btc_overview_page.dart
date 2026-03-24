@@ -32,7 +32,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
   @override
   Widget build(BuildContext context) {
     final priceState = ref.watch(priceStateProvider);
-    final history = ref.watch(priceHistoryProvider);
+    final history = ref.watch(chartDailyPriceHistoryProvider);
     final dailyAsync = ref.watch(priceHistoryDailyProvider);
     final realizedAsync = ref.watch(realizedPriceHistoryProvider);
     final supplyAsync = ref.watch(supplyInProfitProvider);
@@ -69,9 +69,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     final supplyHistory = supplyAsync.valueOrNull ?? [];
     final supplyInProfit =
         supplyHistory.isNotEmpty ? supplyHistory.last.price : 0.0;
+    final hasSupplyInProfit = supplyHistory.isNotEmpty;
 
-    final fundingRate = fundingAsync.valueOrNull?.rate ?? 0.0;
-    final fundingAnnualized = fundingAsync.valueOrNull?.annualizedPct ?? 0.0;
+    final fundingData = fundingAsync.valueOrNull;
+    final fundingRate = fundingData?.rate ?? 0.0;
+    final fundingAnnualized = fundingData?.annualizedPct ?? 0.0;
 
     final mayerColor = mayer > 2.4
         ? AppColors.negative
@@ -121,9 +123,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         mvrvColor,
         currentRealized,
         supplyInProfit,
+        hasSupplyInProfit,
         fundingRate,
         fundingAnnualized,
         fundColor,
+        fundingData != null,
       ),
     );
   }
@@ -322,9 +326,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     Color mvrvColor,
     double currentRealized,
     double supplyInProfit,
+    bool hasSupplyInProfit,
     double fundingRate,
     double fundingAnnualized,
     Color fundColor,
+    bool hasFunding,
   ) {
     final mayerSignal = mayer > 2.4
         ? 'Historically expensive'
@@ -336,14 +342,15 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         : (mvrv > 0 && mvrv < 1.0)
             ? 'Undervalued zone'
             : 'Fair value range';
-    final supplyStr = supplyInProfit > 0
-        ? '${(supplyInProfit).toStringAsFixed(1)}%'
+    final supplyStr = hasSupplyInProfit
+        ? '${supplyInProfit.toStringAsFixed(1)}%'
         : '—';
-    final fundStr = fundingRate != 0
+    final fundStr = hasFunding
         ? '${(fundingRate * 100).toStringAsFixed(4)}%'
         : '—';
-    final fundSignal =
-        fundingAnnualized != 0 ? '${fundingAnnualized.toStringAsFixed(1)}% annualized' : '';
+    final fundSignal = hasFunding
+        ? '${fundingAnnualized.toStringAsFixed(1)}% annualized'
+        : '';
 
     return Column(
       children: [

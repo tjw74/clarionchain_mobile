@@ -30,7 +30,7 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
   @override
   Widget build(BuildContext context) {
     final priceState = ref.watch(priceStateProvider);
-    final history = ref.watch(priceHistoryProvider);
+    final history = ref.watch(chartDailyPriceHistoryProvider);
     final dailyAsync = ref.watch(priceHistoryDailyProvider);
 
     final price = priceState.vwap;
@@ -84,6 +84,10 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
         ? logZScore(wma200wValues, cur200Wma)
         : 0.0;
 
+    final hasZ50 = cur50Dma != null && dma50Values.length >= 2;
+    final hasZ200Dma = cur200Dma != null && dma200Values.length >= 2;
+    final hasZ200Wma = cur200Wma != null && wma200wValues.length >= 2;
+
     final mayer = cur200Dma != null && cur200Dma > 0 && price > 0
         ? mayerMultiple(price, dma200)
         : 0.0;
@@ -130,8 +134,12 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
         zScore50,
         zScore200Dma,
         zScore200Wma,
+        hasZ50,
+        hasZ200Dma,
+        hasZ200Wma,
         mayer,
         priceQuantile,
+        dailyPrices.isNotEmpty,
         signal,
       ),
     );
@@ -341,8 +349,12 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
     double zScore50,
     double zScore200Dma,
     double zScore200Wma,
+    bool hasZ50,
+    bool hasZ200Dma,
+    bool hasZ200Wma,
     double mayer,
     double priceQuantile,
+    bool hasQuantile,
     String signal,
   ) {
     Color _zColor(double z) {
@@ -376,9 +388,7 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
                     Expanded(
                       child: _StatPanel(
                         label: '50 DMA Z-SCORE',
-                        value: zScore50 != 0
-                            ? zScore50.toStringAsFixed(2)
-                            : '—',
+                        value: hasZ50 ? zScore50.toStringAsFixed(2) : '—',
                         valueColor: _zColor(zScore50),
                         signal: zScore50 > 2
                             ? 'Overextended vs 50DMA'
@@ -391,7 +401,7 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
                     Expanded(
                       child: _StatPanel(
                         label: '200 DMA Z-SCORE',
-                        value: zScore200Dma != 0
+                        value: hasZ200Dma
                             ? zScore200Dma.toStringAsFixed(2)
                             : '—',
                         valueColor: _zColor(zScore200Dma),
@@ -413,7 +423,7 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
                     Expanded(
                       child: _StatPanel(
                         label: '200 WMA Z-SCORE',
-                        value: zScore200Wma != 0
+                        value: hasZ200Wma
                             ? zScore200Wma.toStringAsFixed(2)
                             : '—',
                         valueColor: _zColor(zScore200Wma),
@@ -444,7 +454,7 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
                     Expanded(
                       child: _StatPanel(
                         label: 'PRICE QUANTILE',
-                        value: priceQuantile > 0
+                        value: hasQuantile
                             ? '${(priceQuantile * 100).toStringAsFixed(1)}%'
                             : '—',
                         valueColor: priceQuantile > 0.9

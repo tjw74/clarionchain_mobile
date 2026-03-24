@@ -39,7 +39,7 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
   @override
   Widget build(BuildContext context) {
     final priceState = ref.watch(priceStateProvider);
-    final history = ref.watch(priceHistoryProvider);
+    final history = ref.watch(chartDailyPriceHistoryProvider);
     final realizedAsync = ref.watch(realizedPriceHistoryProvider);
     final marketAsync = ref.watch(marketMetricsProvider);
 
@@ -69,8 +69,9 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
         mvrvSeries.add(tick.price / rp);
       }
     }
+    final hasMvrvZ = mvrvSeries.length >= 2 && mvrv > 0;
     final mvrvZScore =
-        mvrvSeries.length >= 2 && mvrv > 0 ? rawZScore(mvrvSeries, mvrv) : 0.0;
+        hasMvrvZ ? rawZScore(mvrvSeries, mvrv) : 0.0;
 
     final circulatingSupply =
         marketAsync.valueOrNull?.circulatingSupply ?? 19700000.0;
@@ -114,7 +115,9 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
         mvrv,
         mvrvColor,
         mvrvZScore,
+        hasMvrvZ,
         premium,
+        currentRealized > 0 && price > 0,
         currentRealized,
         marketCap,
         realizedCap,
@@ -295,7 +298,9 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
     double mvrv,
     Color mvrvColor,
     double mvrvZScore,
+    bool hasMvrvZ,
     double premium,
+    bool hasPremium,
     double currentRealized,
     double marketCap,
     double realizedCap,
@@ -335,9 +340,7 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
                     Expanded(
                       child: _StatPanel(
                         label: 'MVRV Z-SCORE',
-                        value: mvrvZScore != 0
-                            ? mvrvZScore.toStringAsFixed(2)
-                            : '—',
+                        value: hasMvrvZ ? mvrvZScore.toStringAsFixed(2) : '—',
                         valueColor: zColor,
                         signal: 'raw z-score of MVRV',
                       ),
@@ -353,7 +356,7 @@ class _MvrvPageState extends ConsumerState<MvrvPage> {
                     Expanded(
                       child: _StatPanel(
                         label: 'PRICE PREMIUM',
-                        value: premium != 0
+                        value: hasPremium
                             ? '${premium >= 0 ? '+' : ''}${(premium * 100).toStringAsFixed(1)}%'
                             : '—',
                         valueColor: premiumColor,

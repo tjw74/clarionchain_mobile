@@ -1,14 +1,39 @@
+import 'dart:math' show max, min;
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/derivatives_data.dart';
+import '../../models/exchange_tick.dart';
 import '../../providers/derivatives_provider.dart';
+import '../../providers/price_provider.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/chart_axis_labels.dart';
 import '../../widgets/category_page_layout.dart';
 import '../../widgets/stat_card.dart';
 
 String _compactUsd(double v) => formatAxisUsdCompact(v);
+
+/// Last [len] BTC closes aligned to derivative series length (pad front if shorter).
+List<double> _btcPricesForLen(List<PriceTick> btc, int len) {
+  if (btc.isEmpty || len <= 0) return [];
+  if (btc.length >= len) {
+    return btc.sublist(btc.length - len).map((e) => e.price).toList();
+  }
+  final first = btc.first.price;
+  return [
+    ...List<double>.filled(len - btc.length, first),
+    ...btc.map((e) => e.price),
+  ];
+}
+
+List<double> _normalize01(List<double> v) {
+  if (v.isEmpty) return [];
+  final lo = v.reduce(min);
+  final hi = v.reduce(max);
+  if (hi <= lo) return List<double>.filled(v.length, 0.5);
+  return v.map((x) => (x - lo) / (hi - lo)).toList();
+}
 
 class DerivativesPage extends ConsumerWidget {
   const DerivativesPage({super.key});
@@ -19,6 +44,7 @@ class DerivativesPage extends ConsumerWidget {
     final oiAsync = ref.watch(oiProvider);
     final oiHistory = ref.watch(oiHistoryProvider).valueOrNull ?? [];
     final fundHistory = ref.watch(fundingHistoryProvider).valueOrNull ?? [];
+    final btcHistory = ref.watch(chartDailyPriceHistoryProvider);
 
     final funding = fundingAsync.valueOrNull;
     final oi = oiAsync.valueOrNull;
@@ -49,6 +75,7 @@ class DerivativesPage extends ConsumerWidget {
       chart: _DerivativesCharts(
         oiHistory: oiHistory,
         fundHistory: fundHistory,
+        btcHistory: btcHistory,
       ),
       stats: SingleChildScrollView(
         child: Column(children: [
@@ -173,22 +200,32 @@ class _SectionLabel extends StatelessWidget {
 
 class _OiChart extends StatelessWidget {
   final List<OiHistoryPoint> history;
-  const _OiChart({required this.history});
+  final List<PriceTick> btcHistory;
+
+  const _OiChart({required this.history, required this.btcHistory});
 
   @override
   Widget build(BuildContext context) {
     final vals = history.map((p) => p.oiUsd).toList();
-    final maxY = vals.reduce((a, b) => a > b ? a : b);
-    final minY = vals.reduce((a, b) => a < b ? a : b);
-    final pad = (maxY - minY) * 0.1;
+    final btcAligned = _btcPricesForLen(btcHistory, history.length);
+    final oiN = _normalize01(vals);
+    final btcN =
+        btcAligned.length == history.length ? _normalize01(btcAligned) : <double>[];
 
-    final spots = history.asMap().entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value.oiUsd))
+    final oiSpots = oiN
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
+        .toList();
+    final btcSpots = btcN
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
         .toList();
 
     return LineChart(LineChartData(
-      minY: minY - pad,
-      maxY: maxY + pad,
+      minY: -0.02,
+      maxY: 1.02,
       clipData: const FlClipData.all(),
       lineTouchData: const LineTouchData(enabled: false),
       gridData: FlGridData(
@@ -204,10 +241,10 @@ class _OiChart extends StatelessWidget {
         rightTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: kChartAxisReservedRight,
+            reservedSize: 28,
             getTitlesWidget: (v, m) {
               if (v == m.min || v == m.max) return const SizedBox.shrink();
-              return Text(formatAxisUsdCompact(v),
+              return Text(v.toStringAsFixed(1),
                   style: const TextStyle(
                       color: AppColors.textMuted, fontSize: 9),
                   textAlign: TextAlign.right);
@@ -235,7 +272,7 @@ class _OiChart extends StatelessWidget {
       ),
       lineBarsData: [
         LineChartBarData(
-          spots: spots,
+          spots: oiSpots,
           isCurved: true,
           curveSmoothness: 0.2,
           color: AppColors.btcOrange,
@@ -253,6 +290,16 @@ class _OiChart extends StatelessWidget {
             ),
           ),
         ),
+        if (btcSpots.isNotEmpty)
+          LineChartBarData(
+            spots: btcSpots,
+            isCurved: true,
+            curveSmoothness: 0.2,
+            color: AppColors.positive,
+            barWidth: 1.5,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: false),
+          ),
       ],
     ));
   }
@@ -260,29 +307,40 @@ class _OiChart extends StatelessWidget {
 
 class _FundingChart extends StatelessWidget {
   final List<FundingHistoryPoint> history;
-  const _FundingChart({required this.history});
+  final List<PriceTick> btcHistory;
+
+  const _FundingChart({required this.history, required this.btcHistory});
 
   @override
   Widget build(BuildContext context) {
     final vals = history.map((p) => p.rate * 100).toList();
-    final maxY = vals.reduce((a, b) => a > b ? a : b).clamp(0.06, double.infinity);
-    final minY = vals.reduce((a, b) => a < b ? a : b).clamp(double.negativeInfinity, -0.01);
+    final btcAligned = _btcPricesForLen(btcHistory, history.length);
+    final fundN = _normalize01(vals);
+    final btcN =
+        btcAligned.length == history.length ? _normalize01(btcAligned) : <double>[];
 
-    final spots = history.asMap().entries
-        .map((e) => FlSpot(e.key.toDouble(), e.value.rate * 100))
+    final fundSpots = fundN
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
+        .toList();
+    final btcSpots = btcN
+        .asMap()
+        .entries
+        .map((e) => FlSpot(e.key.toDouble(), e.value))
         .toList();
 
     return LineChart(LineChartData(
-      minY: minY,
-      maxY: maxY,
+      minY: -0.02,
+      maxY: 1.02,
       clipData: const FlClipData.all(),
       lineTouchData: const LineTouchData(enabled: false),
       gridData: FlGridData(
         show: true,
         drawVerticalLine: false,
         getDrawingHorizontalLine: (v) => FlLine(
-          color: v == 0 ? AppColors.textMuted : AppColors.border,
-          strokeWidth: v == 0 ? 1.5 : 1,
+          color: (v - 0.5).abs() < 0.02 ? AppColors.textMuted : AppColors.border,
+          strokeWidth: (v - 0.5).abs() < 0.02 ? 1.5 : 1,
         ),
       ),
       borderData: FlBorderData(show: false),
@@ -292,10 +350,10 @@ class _FundingChart extends StatelessWidget {
         rightTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 44,
+            reservedSize: 28,
             getTitlesWidget: (v, m) {
               if (v == m.min || v == m.max) return const SizedBox.shrink();
-              return Text('${v.toStringAsFixed(3)}%',
+              return Text(v.toStringAsFixed(1),
                   style: const TextStyle(
                       color: AppColors.textMuted, fontSize: 9),
                   textAlign: TextAlign.right);
@@ -307,7 +365,7 @@ class _FundingChart extends StatelessWidget {
       ),
       lineBarsData: [
         LineChartBarData(
-          spots: spots,
+          spots: fundSpots,
           isCurved: false,
           color: AppColors.positive,
           barWidth: 1,
@@ -324,6 +382,16 @@ class _FundingChart extends StatelessWidget {
             ),
           ),
         ),
+        if (btcSpots.isNotEmpty)
+          LineChartBarData(
+            spots: btcSpots,
+            isCurved: true,
+            curveSmoothness: 0.2,
+            color: AppColors.btcOrange,
+            barWidth: 1.2,
+            dotData: const FlDotData(show: false),
+            belowBarData: BarAreaData(show: false),
+          ),
       ],
     ));
   }
@@ -332,10 +400,12 @@ class _FundingChart extends StatelessWidget {
 class _DerivativesCharts extends StatelessWidget {
   final List<OiHistoryPoint> oiHistory;
   final List<FundingHistoryPoint> fundHistory;
+  final List<PriceTick> btcHistory;
 
   const _DerivativesCharts({
     required this.oiHistory,
     required this.fundHistory,
+    required this.btcHistory,
   });
 
   @override
@@ -356,8 +426,11 @@ class _DerivativesCharts extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionLabel('OPEN INTEREST — 90 DAYS'),
-                Expanded(child: _OiChart(history: oiHistory)),
+                _SectionLabel(
+                    'OPEN INTEREST — 90 DAYS · orange=OI, teal=BTC (scaled)'),
+                Expanded(
+                    child: _OiChart(
+                        history: oiHistory, btcHistory: btcHistory)),
               ],
             ),
           ),
@@ -368,8 +441,11 @@ class _DerivativesCharts extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _SectionLabel('FUNDING RATE — 30 DAYS'),
-                Expanded(child: _FundingChart(history: fundHistory)),
+                _SectionLabel(
+                    'FUNDING RATE — 30 DAYS · green=funding %, orange=BTC'),
+                Expanded(
+                    child: _FundingChart(
+                        history: fundHistory, btcHistory: btcHistory)),
               ],
             ),
           ),

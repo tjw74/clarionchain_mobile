@@ -47,6 +47,31 @@ final btcDailyChangeVsPriorClosePctProvider = Provider<double?>((ref) {
   );
 });
 
+/// Last [chartDailyWindow] daily closes from full history, with **live VWAP on the last bar**.
+/// No extra “tick” rows — indices stay aligned with daily SMA/WMA overlays.
+const chartDailyWindow = 730;
+
+final chartDailyPriceHistoryProvider = Provider<List<PriceTick>>((ref) {
+  final dailyAsync = ref.watch(priceHistoryDailyProvider);
+  final fallback = ref.watch(priceHistoryProvider);
+  final live = ref.watch(priceStateProvider).vwap;
+
+  final daily = dailyAsync.valueOrNull;
+  if (daily != null && daily.isNotEmpty) {
+    final n = daily.length;
+    final start = n > chartDailyWindow ? n - chartDailyWindow : 0;
+    final slice = List<PriceTick>.from(daily.sublist(start));
+    if (live > 0 && slice.isNotEmpty) {
+      final last = slice.last;
+      slice[slice.length - 1] =
+          PriceTick(price: live, timestamp: last.timestamp);
+    }
+    return slice;
+  }
+
+  return fallback;
+});
+
 class PriceStateNotifier extends StateNotifier<PriceState> {
   final ExchangeService _service;
   StreamSubscription<ExchangeTick>? _sub;

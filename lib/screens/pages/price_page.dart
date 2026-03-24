@@ -17,7 +17,7 @@ class PricePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final priceState = ref.watch(priceStateProvider);
-    final history = ref.watch(priceHistoryProvider);
+    final chartHistory = ref.watch(chartDailyPriceHistoryProvider);
     final dailyAsync = ref.watch(priceHistoryDailyProvider);
     final realizedAsync = ref.watch(realizedPriceHistoryProvider);
 
@@ -44,6 +44,22 @@ class PricePage extends ConsumerWidget {
             realizedByDay[t.timestamp.millisecondsSinceEpoch ~/ 86400000])
         .toList();
 
+    final chartLen = chartHistory.length;
+    final totalDaily = dailyHistory.length;
+    List<double?> tailAlign(List<double?> full) {
+      if (full.isEmpty || chartLen == 0) {
+        return List<double?>.filled(chartLen, null);
+      }
+      if (totalDaily >= chartLen) return full.sublist(totalDaily - chartLen);
+      return List<double?>.filled(chartLen, null);
+    }
+
+    final dma200Chart = tailAlign(dma200);
+    final wma200Chart = tailAlign(wma200);
+    final realizedChart = realizedAligned.isEmpty
+        ? List<double?>.filled(chartLen, null)
+        : tailAlign(realizedAligned);
+
     // ── Current stats ────────────────────────────────────────────────────────
     final currentDma =
         dma200.isNotEmpty ? dma200.lastWhere((v) => v != null, orElse: () => null) : null;
@@ -60,12 +76,13 @@ class PricePage extends ConsumerWidget {
         ? quantile(dailyPrices, price)
         : 0.0;
     final pZScore = dailyPrices.isNotEmpty ? logZScore(dailyPrices, price) : 0.0;
+    final hasPZ = dailyPrices.isNotEmpty;
 
     // 24h change
     double? change24h;
-    if (history.length >= 2) {
-      final oldest = history.first.price;
-      final newest = history.last.price;
+    if (chartHistory.length >= 2) {
+      final oldest = chartHistory.first.price;
+      final newest = chartHistory.last.price;
       if (oldest > 0) change24h = (newest - oldest) / oldest;
     }
     final changeColor =
@@ -85,24 +102,24 @@ class PricePage extends ConsumerWidget {
             ? const Color(0xFF6B8EFF)
             : AppColors.textPrimary;
 
-    // Overlays for the chart
+    // Overlays for the chart (indices match chartDailyPriceHistoryProvider)
     final overlays = [
-      if (dma200.isNotEmpty)
+      if (dma200Chart.any((v) => v != null))
         ChartOverlay(
-          values: dma200,
+          values: dma200Chart,
           color: const Color(0xFFFFD700), // gold
           label: '200 DMA',
         ),
-      if (wma200.isNotEmpty)
+      if (wma200Chart.any((v) => v != null))
         ChartOverlay(
-          values: wma200,
+          values: wma200Chart,
           color: const Color(0xFFFF8C00), // orange
           dashed: true,
           label: '200 WMA',
         ),
-      if (realizedAligned.isNotEmpty)
+      if (realizedChart.any((v) => v != null))
         ChartOverlay(
-          values: realizedAligned,
+          values: realizedChart,
           color: AppColors.btcOrange.withValues(alpha: 0.8),
           dashed: true,
           label: 'Realized',
@@ -220,7 +237,7 @@ class PricePage extends ConsumerWidget {
             StatCard(
               label: 'Price Z-Score',
               icon: Icons.analytics_outlined,
-              value: pZScore != 0 ? pZScore.toStringAsFixed(2) : '—',
+              value: hasPZ ? pZScore.toStringAsFixed(2) : '—',
               valueColor: pZScore > 3
                   ? AppColors.negative
                   : pZScore < -1
@@ -236,7 +253,7 @@ class PricePage extends ConsumerWidget {
             StatCard(
               label: 'Price Quantile',
               icon: Icons.percent_rounded,
-              value: pQuantile > 0
+              value: hasPZ
                   ? '${(pQuantile * 100).toStringAsFixed(1)}%'
                   : '—',
               subValue: pQuantile > 0.8
