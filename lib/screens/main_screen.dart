@@ -174,16 +174,12 @@ class _TopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final priceState   = ref.watch(priceStateProvider);
-    final priceHistory = ref.watch(priceHistoryProvider);
-    final price  = priceState.vwap;
-    // 24h change from last two daily closes
-    final change = priceHistory.length >= 2
-        ? (price - priceHistory[priceHistory.length - 2].price) /
-          priceHistory[priceHistory.length - 2].price * 100
-        : 0.0;
-    final changeColor =
-        change >= 0 ? AppColors.positive : AppColors.negative;
+    final priceState = ref.watch(priceStateProvider);
+    final price = priceState.vwap;
+    final changePct = ref.watch(btcDailyChangeVsPriorClosePctProvider);
+    final changeColor = (changePct ?? 0) >= 0
+        ? AppColors.positive
+        : AppColors.negative;
 
     return Container(
       padding: EdgeInsets.only(
@@ -198,9 +194,15 @@ class _TopBar extends ConsumerWidget {
             bottom: BorderSide(color: AppColors.border, width: 1)),
       ),
       child: Row(children: [
-        // Logo
-        Image.asset('assets/clarionchain_logo.png',
-            width: 24, height: 24),
+        // Logo (transparent outer ring; clip to circle)
+        ClipOval(
+          child: Image.asset(
+            'assets/clarionchain_logo.png',
+            width: 24,
+            height: 24,
+            fit: BoxFit.cover,
+          ),
+        ),
         const SizedBox(width: 8),
 
         // Row label
@@ -230,12 +232,15 @@ class _TopBar extends ConsumerWidget {
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.3)),
-          const SizedBox(width: 6),
-          Text('${change >= 0 ? '+' : ''}${change.toStringAsFixed(1)}%',
-              style: TextStyle(
-                  color: changeColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600)),
+          if (changePct != null) ...[
+            const SizedBox(width: 6),
+            Text(
+                '${changePct >= 0 ? '+' : ''}${changePct.toStringAsFixed(1)}%',
+                style: TextStyle(
+                    color: changeColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
+          ],
           const SizedBox(width: 8),
         ],
 

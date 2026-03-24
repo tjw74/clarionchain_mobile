@@ -1,20 +1,14 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../models/derivatives_data.dart';
 import '../../providers/derivatives_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
+import '../../widgets/category_page_layout.dart';
 import '../../widgets/stat_card.dart';
 
-final _priceFmt = NumberFormat('#,##0', 'en_US');
-
-String _compactUsd(double v) {
-  if (v >= 1e12) return '\$${(v / 1e12).toStringAsFixed(2)}T';
-  if (v >= 1e9) return '\$${(v / 1e9).toStringAsFixed(1)}B';
-  if (v >= 1e6) return '\$${(v / 1e6).toStringAsFixed(1)}M';
-  return '\$${_priceFmt.format(v)}';
-}
+String _compactUsd(double v) => formatAxisUsdCompact(v);
 
 class DerivativesPage extends ConsumerWidget {
   const DerivativesPage({super.key});
@@ -45,54 +39,19 @@ class DerivativesPage extends ConsumerWidget {
             ? const Color(0xFF6B8EFF)
             : AppColors.textPrimary;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const SizedBox(height: 8),
-
-        Row(children: [
-          const Icon(Icons.candlestick_chart_outlined,
-              color: AppColors.btcOrange, size: 20),
-          const SizedBox(width: 8),
-          const Text('DERIVATIVES',
-              style: TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.2)),
-          const Spacer(),
-          const Text('Binance Futures',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
-        ]),
-
-        const SizedBox(height: 12),
-
-        // OI chart
-        if (oiHistory.isNotEmpty) ...[
-          _SectionLabel('OPEN INTEREST — 90 DAYS'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 140,
-            child: _OiChart(history: oiHistory),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Funding rate chart
-        if (fundHistory.isNotEmpty) ...[
-          _SectionLabel('FUNDING RATE — 30 DAYS'),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 120,
-            child: _FundingChart(history: fundHistory),
-          ),
-          const SizedBox(height: 12),
-        ],
-
-        // Stats
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(children: [
+    return CategoryPageLayout(
+      header: const CategoryPageHeader(
+        category: 'BTC',
+        title: 'Derivatives',
+        accentColor: AppColors.btcOrange,
+        trailingHint: 'Binance Futures',
+      ),
+      chart: _DerivativesCharts(
+        oiHistory: oiHistory,
+        fundHistory: fundHistory,
+      ),
+      stats: SingleChildScrollView(
+        child: Column(children: [
               StatRow(cards: [
                 StatCard(
                   label: 'Funding Rate',
@@ -173,9 +132,7 @@ class DerivativesPage extends ConsumerWidget {
 
               const SizedBox(height: 16),
             ]),
-          ),
-        ),
-      ]),
+      ),
     );
   }
 
@@ -247,10 +204,10 @@ class _OiChart extends StatelessWidget {
         rightTitles: AxisTitles(
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 52,
+            reservedSize: kChartAxisReservedRight,
             getTitlesWidget: (v, m) {
               if (v == m.min || v == m.max) return const SizedBox.shrink();
-              return Text(_compactUsd(v),
+              return Text(formatAxisUsdCompact(v),
                   style: const TextStyle(
                       color: AppColors.textMuted, fontSize: 9),
                   textAlign: TextAlign.right);
@@ -369,5 +326,54 @@ class _FundingChart extends StatelessWidget {
         ),
       ],
     ));
+  }
+}
+
+class _DerivativesCharts extends StatelessWidget {
+  final List<OiHistoryPoint> oiHistory;
+  final List<FundingHistoryPoint> fundHistory;
+
+  const _DerivativesCharts({
+    required this.oiHistory,
+    required this.fundHistory,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (oiHistory.isEmpty && fundHistory.isEmpty) {
+      return const Center(
+        child: Text(
+          'Chart data unavailable',
+          style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (oiHistory.isNotEmpty)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionLabel('OPEN INTEREST — 90 DAYS'),
+                Expanded(child: _OiChart(history: oiHistory)),
+              ],
+            ),
+          ),
+        if (oiHistory.isNotEmpty && fundHistory.isNotEmpty)
+          const SizedBox(height: 8),
+        if (fundHistory.isNotEmpty)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionLabel('FUNDING RATE — 30 DAYS'),
+                Expanded(child: _FundingChart(history: fundHistory)),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }

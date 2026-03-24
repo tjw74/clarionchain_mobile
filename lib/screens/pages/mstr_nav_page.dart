@@ -5,11 +5,12 @@ import 'package:intl/intl.dart';
 import '../../providers/price_provider.dart';
 import '../../providers/stock_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../models/exchange_tick.dart';
 import '../../models/stock_data.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _priceFmt2Nav = NumberFormat('#,##0.00', 'en_US');
-final _priceFmt0Nav = NumberFormat('#,##0', 'en_US');
 final _intFmtNav = NumberFormat('#,##0', 'en_US');
 
 String _compactNav(double v) {
@@ -77,12 +78,6 @@ class _MstrNavPageState extends ConsumerState<MstrNavPage> {
             ? AppColors.positive
             : AppColors.textPrimary;
 
-    final headerValue = navPerShare > 0
-        ? '\$${_priceFmt2Nav.format(navPerShare)}'
-        : '—';
-    final headerChange = premiumStr;
-    final headerChangeColor = premiumColor;
-
     // NAV history: btcHoldings * btcPrice_per_day / sharesOutstanding
     final navHistory = history
         .map((t) => t.price * _btcHoldings / sharesOutstanding)
@@ -91,40 +86,29 @@ class _MstrNavPageState extends ConsumerState<MstrNavPage> {
     // MSTR price history aligned to same indices as btcHistory
     final mstrBarHistory = mstrQuote?.history ?? [];
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
+    final subtitle = navPerShare > 0
+        ? '\$${_priceFmt2Nav.format(navPerShare)} / sh · $premiumStr'
+        : null;
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header('MSTR', 'NAV', headerValue, headerChange, headerChangeColor),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: _buildChart(
-                  context, history, navHistory, mstrBarHistory, sharesOutstanding),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                navPerShare,
-                mstrPrice,
-                premium,
-                premiumColor,
-                btcPerShare,
-                marketCap,
-                changePct,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    return CategoryPageLayout(
+      header: CategoryPageHeader(
+        category: 'MSTR',
+        title: 'NAV',
+        accentColor: const Color(0xFFFF6B35),
+        subtitle: subtitle,
+      ),
+      chart: _buildChart(
+          context, history, navHistory, mstrBarHistory, sharesOutstanding),
+      stats: _buildStats(
+        navPerShare,
+        mstrPrice,
+        premium,
+        premiumColor,
+        btcPerShare,
+        marketCap,
+        changePct,
+      ),
+    );
   }
 
   Widget _buildChart(
@@ -242,15 +226,15 @@ class _MstrNavPageState extends ConsumerState<MstrNavPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    '\$${_priceFmt0Nav.format(value.round())}',
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -424,60 +408,6 @@ class _MstrNavPageState extends ConsumerState<MstrNavPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(change,
-                    style: TextStyle(
-                        color: changeColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {

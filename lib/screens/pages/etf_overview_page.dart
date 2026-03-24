@@ -5,8 +5,10 @@ import 'package:intl/intl.dart';
 import '../../providers/price_provider.dart';
 import '../../providers/stock_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../models/exchange_tick.dart';
 import '../../models/stock_data.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _intFmt = NumberFormat('#,##0', 'en_US');
 
@@ -44,44 +46,24 @@ class _EtfOverviewPageState extends ConsumerState<EtfOverviewPage> {
     final launchDt = DateTime.parse(_etfLaunchDate);
     final etfHistory = history.where((t) => !t.timestamp.isBefore(launchDt)).toList();
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
-
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(
-              'ETFs',
-              'OVERVIEW',
-              '${_intFmt.format(_totalBtcHeld)} ₿',
-              'Total BTC held',
-              AppColors.btcOrange,
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: _buildChart(context, etfHistory),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                ibitAsync,
-                fbtcAsync,
-                arkbAsync,
-                bitbAsync,
-                gbtcAsync,
-                hodlAsync,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    return CategoryPageLayout(
+      header: CategoryPageHeader(
+        category: 'ETFs',
+        title: 'Overview',
+        accentColor: const Color(0xFF4488FF),
+        subtitle: '~${_intFmt.format(_totalBtcHeld)} BTC (est. held)',
+        trailingHint: 'Since Jan 2024',
+      ),
+      chart: _buildChart(context, etfHistory),
+      stats: _buildStats(
+        ibitAsync,
+        fbtcAsync,
+        arkbAsync,
+        bitbAsync,
+        gbtcAsync,
+        hodlAsync,
+      ),
+    );
   }
 
   Widget _buildChart(BuildContext context, List<PriceTick> history) {
@@ -166,18 +148,15 @@ class _EtfOverviewPageState extends ConsumerState<EtfOverviewPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
-                  final label = value >= 1000
-                      ? '\$${(value / 1000).toStringAsFixed(0)}K'
-                      : '\$${value.toStringAsFixed(0)}';
                   return Text(
-                    label,
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -293,56 +272,6 @@ class _EtfOverviewPageState extends ConsumerState<EtfOverviewPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _EtfPanel extends StatelessWidget {

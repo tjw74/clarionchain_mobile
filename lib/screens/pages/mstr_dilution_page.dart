@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/stock_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _intFmtDil = NumberFormat('#,##0', 'en_US');
 
@@ -65,12 +67,8 @@ class _MstrDilutionPageState extends ConsumerState<MstrDilutionPage> {
             ? const Color(0xFFFFAA00)
             : AppColors.positive;
 
-    final headerValue = _intFmtDil.format(currentShares);
     final headerChange =
         '${ytdDilution >= 0 ? '+' : ''}${(ytdDilution * 100).toStringAsFixed(1)}% YTD';
-    final headerChangeColor =
-        ytdDilution > 0.20 ? AppColors.negative : AppColors.textSecondary;
-
     // Build spots from milestones + current value
     final allMilestones = [
       ..._dilutionMilestones,
@@ -87,40 +85,27 @@ class _MstrDilutionPageState extends ConsumerState<MstrDilutionPage> {
       return FlSpot(monthsOffset.toDouble(), m.sharesMillion);
     }).toList();
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
+    final subtitle =
+        '${_intFmtDil.format(currentShares)} sh · $headerChange';
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header('MSTR', 'DILUTION', headerValue, headerChange,
-                headerChangeColor),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: _buildChart(context, chartSpots, allMilestones),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                currentShares,
-                ytdDilution,
-                twoYrDilution,
-                btcPerShare,
-                signal,
-                signalColor,
-                mstrAsync.isLoading,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    return CategoryPageLayout(
+      header: CategoryPageHeader(
+        category: 'MSTR',
+        title: 'Dilution',
+        accentColor: const Color(0xFFFF6B35),
+        subtitle: subtitle,
+      ),
+      chart: _buildChart(context, chartSpots, allMilestones),
+      stats: _buildStats(
+        currentShares,
+        ytdDilution,
+        twoYrDilution,
+        btcPerShare,
+        signal,
+        signalColor,
+        mstrAsync.isLoading,
+      ),
+    );
   }
 
   Widget _buildChart(
@@ -190,15 +175,19 @@ class _MstrDilutionPageState extends ConsumerState<MstrDilutionPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
+                  final m = value;
+                  final t = m >= 1000
+                      ? '${(m / 1000).toStringAsFixed(2)}B sh'
+                      : '${m.toStringAsFixed(0)}M sh';
                   return Text(
-                    '${value.toStringAsFixed(0)}M',
+                    t,
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -401,56 +390,6 @@ class _MstrDilutionPageState extends ConsumerState<MstrDilutionPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {

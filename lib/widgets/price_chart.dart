@@ -4,8 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../providers/price_provider.dart';
 import '../theme/app_theme.dart';
-
-final _priceFmt = NumberFormat('#,##0', 'en_US');
+import '../utils/chart_axis_labels.dart';
 
 String _timeLabel(DateTime dt, double visibleDays) {
   if (visibleDays <= 1) return DateFormat('HH:mm').format(dt);
@@ -115,8 +114,7 @@ class _PriceChartState extends ConsumerState<PriceChart>
         history.last.timestamp.difference(history.first.timestamp).inMinutes /
             1440.0;
 
-    // Chart layout constants (must match SideTitles reservedSize)
-    const rightReserved = 68.0;
+    const rightReserved = kChartAxisReservedRight;
     const bottomReserved = 22.0;
 
     return GestureDetector(
@@ -185,9 +183,9 @@ class _PriceChartState extends ConsumerState<PriceChart>
                         return const SizedBox.shrink();
                       }
                       return Text(
-                        '\$${_priceFmt.format(value)}',
+                        formatAxisUsdCompact(value),
                         style: const TextStyle(
-                            color: AppColors.textMuted, fontSize: 10),
+                            color: AppColors.textMuted, fontSize: 9),
                         textAlign: TextAlign.right,
                       );
                     },

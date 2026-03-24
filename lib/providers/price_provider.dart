@@ -31,6 +31,22 @@ final priceStateProvider =
   return PriceStateNotifier(ref.watch(exchangeServiceProvider));
 });
 
+/// Live VWAP vs prior daily close (bitview), as %. Used for top bar; avoids
+/// using `priceHistoryProvider` which mixes years of dailies with sub-minute ticks.
+final btcDailyChangeVsPriorClosePctProvider = Provider<double?>((ref) {
+  final dailyAsync = ref.watch(priceHistoryDailyProvider);
+  final live = ref.watch(priceStateProvider).vwap;
+  return dailyAsync.maybeWhen(
+    data: (ticks) {
+      if (ticks.length < 2 || live <= 0) return null;
+      final prevClose = ticks[ticks.length - 2].price;
+      if (prevClose <= 0) return null;
+      return (live - prevClose) / prevClose * 100;
+    },
+    orElse: () => null,
+  );
+});
+
 class PriceStateNotifier extends StateNotifier<PriceState> {
   final ExchangeService _service;
   StreamSubscription<ExchangeTick>? _sub;

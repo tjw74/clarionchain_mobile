@@ -4,20 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/price_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../utils/chart_math.dart';
 import '../../models/exchange_tick.dart';
-
-final _priceFmt = NumberFormat('#,##0', 'en_US');
-
-String _compactPrice(double v) {
-  if (v >= 1000000) {
-    return '\$${(v / 1000000).toStringAsFixed(2)}M';
-  }
-  if (v >= 1000) {
-    return '\$${(v / 1000).toStringAsFixed(0)}K';
-  }
-  return '\$${v.toStringAsFixed(0)}';
-}
+import '../../widgets/category_page_layout.dart';
 
 class MeanReversionPage extends ConsumerStatefulWidget {
   const MeanReversionPage({super.key});
@@ -111,18 +101,6 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
       signal = 'Fairly valued';
     }
 
-    // 24h change from history
-    double change24h = 0.0;
-    if (history.length >= 2) {
-      final oldest = history.first.price;
-      final newest = history.last.price;
-      if (oldest > 0) change24h = (newest - oldest) / oldest;
-    }
-    final changeColor =
-        change24h >= 0 ? AppColors.positive : AppColors.negative;
-    final changeStr =
-        '${change24h >= 0 ? '+' : ''}${(change24h * 100).toStringAsFixed(2)}%';
-
     // Align overlays to chart history
     final chartLen = history.length;
     final totalDaily = dailyPrices.length;
@@ -139,45 +117,24 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
     final overlay200 = _alignOverlay(dma200);
     final overlayWma = _alignOverlay(wma200w);
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
-
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(
-              'BTC',
-              'MEAN REVERSION',
-              price > 0 ? '\$${_priceFmt.format(price.round())}' : '—',
-              price > 0 ? changeStr : '—',
-              changeColor,
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: _buildChart(
-                  context, history, overlay50, overlay200, overlayWma),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                zScore50,
-                zScore200Dma,
-                zScore200Wma,
-                mayer,
-                priceQuantile,
-                signal,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    return CategoryPageLayout(
+      header: const CategoryPageHeader(
+        category: 'BTC',
+        title: 'Mean reversion',
+        accentColor: AppColors.btcOrange,
+        trailingHint: 'MA bands',
+      ),
+      chart: _buildChart(
+          context, history, overlay50, overlay200, overlayWma),
+      stats: _buildStats(
+        zScore50,
+        zScore200Dma,
+        zScore200Wma,
+        mayer,
+        priceQuantile,
+        signal,
+      ),
+    );
   }
 
   Widget _buildChart(
@@ -286,15 +243,15 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    _compactPrice(value),
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -517,56 +474,6 @@ class _MeanReversionPageState extends ConsumerState<MeanReversionPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {

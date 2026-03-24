@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/exchange_tick.dart';
 import '../theme/app_theme.dart';
-
-final _priceFmt = NumberFormat('#,##0', 'en_US');
+import '../utils/chart_axis_labels.dart';
 
 class MarketChart extends StatefulWidget {
   final List<PriceTick> priceHistory;
@@ -92,7 +91,7 @@ class _MarketChartState extends State<MarketChart> {
       return DateFormat('MMM yy').format(dt);
     }
 
-    const rightReserved = 68.0;
+    const rightReserved = kChartAxisReservedRight;
     const bottomReserved = 22.0;
 
     return GestureDetector(
@@ -149,9 +148,9 @@ class _MarketChartState extends State<MarketChart> {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    '\$${_priceFmt.format(value)}',
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },

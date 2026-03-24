@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/exchange_tick.dart';
 import '../../providers/metrics_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
+import '../../widgets/category_page_layout.dart';
 
 // ── Formatting ────────────────────────────────────────────────────────────────
 
@@ -15,12 +17,6 @@ String _compactUsd(double v) {
   return '\$${v.toStringAsFixed(0)}';
 }
 
-String _axisLabel(double v) {
-  if (v >= 1e12) return '${(v / 1e12).toStringAsFixed(1)}T';
-  if (v >= 1e9)  return '${(v / 1e9).toStringAsFixed(0)}B';
-  if (v >= 1e6)  return '${(v / 1e6).toStringAsFixed(0)}M';
-  return v.toStringAsFixed(0);
-}
 
 double _default4YrStart(int n) {
   const days4yr = 1460;
@@ -130,7 +126,7 @@ class _PnlChartState extends State<_PnlChart> {
               showTitles: true, reservedSize: 48,
               getTitlesWidget: (v, meta) {
                 if (v == meta.min || v == meta.max) return const SizedBox.shrink();
-                return Text(_axisLabel(v),
+                return Text(formatAxisNumberCompact(v),
                     style: const TextStyle(color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right);
               },
@@ -359,147 +355,126 @@ class _PnlPageState extends ConsumerState<PnlPage> {
       signal = 'Balanced market'; signalColor = AppColors.textSecondary;
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      final totalH    = constraints.maxHeight;
-      // Fixed-height sections
-      const headerH   = 28.0;
-      const ratioHdrH = 22.0;
-      const statsH    = 130.0; // 2 rows × ~57px + gap
-      const spacing   = 8.0 * 5;
-      final chartH    = (totalH - headerH - ratioHdrH - statsH - spacing) * 0.65;
-      final ratioH    = (totalH - headerH - ratioHdrH - statsH - spacing) * 0.35;
-
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-
-            // ── Header ───────────────────────────────────────────────────
-            SizedBox(
-              height: headerH,
-              child: Row(children: [
-                const Text('UNREALIZED P&L',
-                    style: TextStyle(color: AppColors.textSecondary,
-                        fontSize: 11, fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8)),
-                const SizedBox(width: 10),
-                _dot(AppColors.positive),
-                const SizedBox(width: 4),
-                const Text('Profit', style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 10)),
-                const SizedBox(width: 8),
-                _dot(AppColors.negative),
-                const SizedBox(width: 4),
-                const Text('Loss', style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 10)),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
+    return CategoryPageLayout(
+      header: const CategoryPageHeader(
+        category: 'BTC',
+        title: 'P&L',
+        accentColor: AppColors.btcOrange,
+        trailingHint: 'Unrealized',
+      ),
+      chart: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 62,
+            child: _PnlChart(
+              profit: uProfit,
+              loss: uLoss,
+              profitColor: AppColors.positive,
+              lossColor: AppColors.negative,
+              viewStart: _viewStart,
+              viewEnd: _viewEnd,
+              onViewChanged: (s, e) => setState(() {
+                _viewStart = s;
+                _viewEnd = e;
+              }),
+            ),
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 22,
+            child: Row(children: [
+              const Text('P/L RATIO',
+                  style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8)),
+              const SizedBox(width: 8),
+              _dot(AppColors.positive),
+              const SizedBox(width: 4),
+              const Text('Profit', style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 10)),
+              const SizedBox(width: 8),
+              _dot(AppColors.negative),
+              const SizedBox(width: 4),
+              const Text('Loss', style: TextStyle(
+                  color: AppColors.textSecondary, fontSize: 10)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
                     color: signalColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(20)),
-                  child: Text(signal, style: TextStyle(
-                      color: signalColor, fontSize: 10,
-                      fontWeight: FontWeight.w600)),
-                ),
-              ]),
-            ),
-
-            const SizedBox(height: 8),
-
-            // ── Main chart ───────────────────────────────────────────────
-            SizedBox(
-              height: chartH,
-              child: _PnlChart(
-                profit: uProfit, loss: uLoss,
-                profitColor: AppColors.positive,
-                lossColor: AppColors.negative,
-                viewStart: _viewStart, viewEnd: _viewEnd,
-                onViewChanged: (s, e) => setState(() {
-                  _viewStart = s; _viewEnd = e;
-                }),
+                child: Text(signal,
+                    style: TextStyle(
+                        color: signalColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600)),
               ),
+            ]),
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            flex: 38,
+            child: _RatioChart(
+              profit: uProfit,
+              loss: uLoss,
+              viewStart: _viewStart,
+              viewEnd: _viewEnd,
             ),
-
-            const SizedBox(height: 8),
-
-            // ── Ratio header ──────────────────────────────────────────────
-            SizedBox(
-              height: ratioHdrH,
-              child: Row(children: [
-                const Text('P/L RATIO',
-                    style: TextStyle(color: AppColors.textSecondary,
-                        fontSize: 10, fontWeight: FontWeight.w700,
-                        letterSpacing: 0.8)),
+          ),
+        ],
+      ),
+      stats: Column(
+        children: [
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Stat(
+                    label: 'UNREALIZED PROFIT',
+                    value: curUP > 0 ? _compactUsd(curUP) : '—',
+                    color: AppColors.positive,
+                    sub: 'BTC above cost basis'),
                 const SizedBox(width: 8),
-                _dot(AppColors.positive),
-                const SizedBox(width: 4),
-                const Text('Profit dominant', style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 10)),
+                _Stat(
+                    label: 'UNREALIZED LOSS',
+                    value: curUL > 0 ? _compactUsd(curUL) : '—',
+                    color: AppColors.negative,
+                    sub: 'BTC below cost basis'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Stat(
+                    label: 'NET UNREALIZED',
+                    value: (curUP > 0 || curUL > 0)
+                        ? '${net >= 0 ? '+' : ''}${_compactUsd(net)}'
+                        : '—',
+                    color: net >= 0 ? AppColors.positive : AppColors.negative,
+                    sub: 'Profit minus loss'),
                 const SizedBox(width: 8),
-                _dot(AppColors.negative),
-                const SizedBox(width: 4),
-                const Text('Loss dominant', style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 10)),
-              ]),
-            ),
-
-            const SizedBox(height: 6),
-
-            // ── Ratio chart ───────────────────────────────────────────────
-            SizedBox(
-              height: ratioH,
-              child: _RatioChart(
-                profit: uProfit, loss: uLoss,
-                viewStart: _viewStart, viewEnd: _viewEnd,
-              ),
-            ),
-
-            const SizedBox(height: 8),
-
-            // ── Stats ─────────────────────────────────────────────────────
-            SizedBox(
-              height: statsH,
-              child: Column(children: [
-                Expanded(child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Stat(label: 'UNREALIZED PROFIT',
-                        value: curUP > 0 ? _compactUsd(curUP) : '—',
-                        color: AppColors.positive,
-                        sub: 'BTC above cost basis'),
-                    const SizedBox(width: 8),
-                    _Stat(label: 'UNREALIZED LOSS',
-                        value: curUL > 0 ? _compactUsd(curUL) : '—',
-                        color: AppColors.negative,
-                        sub: 'BTC below cost basis'),
-                  ],
-                )),
-                const SizedBox(height: 8),
-                Expanded(child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _Stat(label: 'NET UNREALIZED',
-                        value: (curUP > 0 || curUL > 0)
-                            ? '${net >= 0 ? '+' : ''}${_compactUsd(net)}' : '—',
-                        color: net >= 0 ? AppColors.positive : AppColors.negative,
-                        sub: 'Profit minus loss'),
-                    const SizedBox(width: 8),
-                    _Stat(label: 'SUPPLY IN PROFIT',
-                        value: supplyPct > 0
-                            ? '${supplyPct.toStringAsFixed(1)}%' : '—',
-                        color: supplyPct > 75 ? AppColors.negative
-                            : supplyPct < 40 ? const Color(0xFF6B8EFF)
+                _Stat(
+                    label: 'SUPPLY IN PROFIT',
+                    value: supplyPct > 0
+                        ? '${supplyPct.toStringAsFixed(1)}%'
+                        : '—',
+                    color: supplyPct > 75
+                        ? AppColors.negative
+                        : supplyPct < 40
+                            ? const Color(0xFF6B8EFF)
                             : AppColors.textPrimary,
-                        sub: 'of circulating BTC'),
-                  ],
-                )),
-              ]),
+                    sub: 'of circulating BTC'),
+              ],
             ),
-          ],
-        ),
-      );
-    });
+          ),
+        ],
+      ),
+    );
   }
 }

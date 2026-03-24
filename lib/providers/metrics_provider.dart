@@ -99,8 +99,14 @@ class _PollingNotifier<T> extends StateNotifier<AsyncValue<T>> {
   Future<void> _load() async {
     try {
       final result = await fetch();
-      if (result != null && mounted) {
+      if (!mounted) return;
+      if (result != null) {
         state = AsyncValue.data(result);
+      } else if (!state.hasValue) {
+        state = AsyncValue.error(
+          StateError('Data unavailable'),
+          StackTrace.current,
+        );
       }
     } catch (e, st) {
       if (mounted) state = AsyncValue.error(e, st);

@@ -5,10 +5,11 @@ import 'package:intl/intl.dart';
 import '../../providers/price_provider.dart';
 import '../../providers/stock_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../models/stock_data.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _priceFmt2 = NumberFormat('#,##0.00', 'en_US');
-final _priceFmt0 = NumberFormat('#,##0', 'en_US');
 
 class MstrPricePage extends ConsumerStatefulWidget {
   const MstrPricePage({super.key});
@@ -62,54 +63,42 @@ class _MstrPricePageState extends ConsumerState<MstrPricePage> {
       vsBtc = '$sign${diff.toStringAsFixed(1)}% vs BTC';
     }
 
-    final headerValue =
-        price > 0 ? '\$${_priceFmt2.format(price)}' : '—';
-    final headerChange = changePct != 0
-        ? '${isUp ? '+' : ''}${(changePct * 100).toStringAsFixed(2)}%'
-        : '—';
+    final subtitle = price > 0
+        ? '\$${_priceFmt2.format(price)} · ${changePct != 0 ? '${isUp ? '+' : ''}${(changePct * 100).toStringAsFixed(2)}%' : '—'}'
+        : null;
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
+    final Widget chartBody = mstrAsync.isLoading
+        ? const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.btcOrange, strokeWidth: 2))
+        : mstrAsync.hasError
+            ? const Center(
+                child: Text('Error loading MSTR',
+                    style: TextStyle(color: AppColors.textSecondary)))
+            : _buildChart(context, history);
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header('MSTR', 'PRICE', headerValue, headerChange, changeColor),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: mstrAsync.isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.btcOrange, strokeWidth: 2))
-                  : mstrAsync.hasError
-                      ? Center(
-                          child: Text('Error loading MSTR',
-                              style: const TextStyle(
-                                  color: AppColors.textSecondary)))
-                      : _buildChart(context, history),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                price,
-                changeDollar,
-                changePct,
-                changeColor,
-                high52w,
-                low52w,
-                vsBtc,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    final Widget statsBody = mstrAsync.isLoading || mstrAsync.hasError
+        ? const SizedBox.expand()
+        : _buildStats(
+            price,
+            changeDollar,
+            changePct,
+            changeColor,
+            high52w,
+            low52w,
+            vsBtc,
+          );
+
+    return CategoryPageLayout(
+      header: CategoryPageHeader(
+        category: 'MSTR',
+        title: 'Price',
+        accentColor: const Color(0xFFFF6B35),
+        subtitle: subtitle,
+      ),
+      chart: chartBody,
+      stats: statsBody,
+    );
   }
 
   Widget _buildChart(BuildContext context, List<StockBar> history) {
@@ -193,15 +182,15 @@ class _MstrPricePageState extends ConsumerState<MstrPricePage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    '\$${_priceFmt0.format(value.round())}',
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -374,56 +363,6 @@ class _MstrPricePageState extends ConsumerState<MstrPricePage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {

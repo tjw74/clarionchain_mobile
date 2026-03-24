@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../providers/stock_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../models/stock_data.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _priceFmtPref = NumberFormat('#,##0.00', 'en_US');
-final _priceFmt0Pref = NumberFormat('#,##0', 'en_US');
 
 class PreferredPage extends ConsumerStatefulWidget {
   final String ticker;
@@ -44,7 +45,6 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
     final price = quote?.price ?? 0.0;
     final changePct = quote?.changePct ?? 0.0;
     final isUp = changePct >= 0;
-    final changeColor = isUp ? AppColors.positive : AppColors.negative;
 
     final premiumToPar = price > 0 && widget.parValue > 0
         ? (price - widget.parValue) / widget.parValue
@@ -56,58 +56,45 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
 
     final history = quote?.history ?? [];
 
-    final headerValue = price > 0 ? '\$${_priceFmtPref.format(price)}' : '—';
     final headerChange = changePct != 0
         ? '${isUp ? '+' : ''}${(changePct * 100).toStringAsFixed(2)}%'
         : '—';
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
+    final subtitle = price > 0
+        ? '\$${_priceFmtPref.format(price)} · $headerChange'
+        : null;
 
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(
-              widget.ticker,
-              widget.displayName.toUpperCase(),
-              headerValue,
-              headerChange,
-              changeColor,
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: quoteAsync.isLoading
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.btcOrange, strokeWidth: 2))
-                  : quoteAsync.hasError
-                      ? Center(
-                          child: Text(
-                            'Error loading ${widget.ticker}',
-                            style: const TextStyle(
-                                color: AppColors.textSecondary),
-                          ),
-                        )
-                      : _buildChart(context, history),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                price,
-                premiumToPar,
-                annualYield,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    final chartBody = quoteAsync.isLoading
+        ? const Center(
+            child: CircularProgressIndicator(
+                color: AppColors.btcOrange, strokeWidth: 2))
+        : quoteAsync.hasError
+            ? Center(
+                child: Text(
+                  'Error loading ${widget.ticker}',
+                  style: const TextStyle(color: AppColors.textSecondary),
+                ),
+              )
+            : _buildChart(context, history);
+
+    final statsBody = quoteAsync.isLoading || quoteAsync.hasError
+        ? const SizedBox.expand()
+        : _buildStats(
+            price,
+            premiumToPar,
+            annualYield,
+          );
+
+    return CategoryPageLayout(
+      header: CategoryPageHeader(
+        category: widget.ticker,
+        title: widget.displayName,
+        accentColor: const Color(0xFF9B59B6),
+        subtitle: subtitle,
+      ),
+      chart: chartBody,
+      stats: statsBody,
+    );
   }
 
   Widget _buildChart(BuildContext context, List<StockBar> history) {
@@ -202,15 +189,15 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    '\$${_priceFmt0Pref.format(value.round())}',
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -327,7 +314,7 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
                     Expanded(
                       child: _StatPanel(
                         label: 'PAR VALUE',
-                        value: '\$${_priceFmt0Pref.format(widget.parValue.round())}',
+                        value: '\$${_priceFmtPref.format(widget.parValue)}',
                         valueColor: AppColors.btcOrange,
                         signal: 'Liquidation preference',
                       ),
@@ -359,7 +346,7 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
                             : '—',
                         valueColor: price > 0 ? yieldColor : AppColors.textMuted,
                         signal:
-                            '${(widget.dividendRate * 100).toStringAsFixed(0)}% dividend on \$${_priceFmt0Pref.format(widget.parValue.round())} par',
+                            '${(widget.dividendRate * 100).toStringAsFixed(0)}% dividend on \$${_priceFmtPref.format(widget.parValue)} par',
                       ),
                     ),
                   ],
@@ -372,56 +359,6 @@ class _PreferredPageState extends ConsumerState<PreferredPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {

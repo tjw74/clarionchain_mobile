@@ -6,21 +6,12 @@ import '../../providers/price_provider.dart';
 import '../../providers/metrics_provider.dart';
 import '../../providers/derivatives_provider.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/chart_axis_labels.dart';
 import '../../utils/chart_math.dart';
 import '../../models/exchange_tick.dart';
+import '../../widgets/category_page_layout.dart';
 
 final _priceFmt = NumberFormat('#,##0', 'en_US');
-final _compactFmt = NumberFormat.compact(locale: 'en_US');
-
-String _compactPrice(double v) {
-  if (v >= 1000000) return '\$${_compactFmt.format(v)}';
-  return '\$${_priceFmt.format(v.round())}';
-}
-
-String _formatPct(double v) {
-  final sign = v >= 0 ? '+' : '';
-  return '$sign${(v * 100).toStringAsFixed(2)}%';
-}
 
 class BtcOverviewPage extends ConsumerStatefulWidget {
   const BtcOverviewPage({super.key});
@@ -82,16 +73,6 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     final fundingRate = fundingAsync.valueOrNull?.rate ?? 0.0;
     final fundingAnnualized = fundingAsync.valueOrNull?.annualizedPct ?? 0.0;
 
-    double change24h = 0.0;
-    if (history.length >= 2) {
-      final oldest = history.first.price;
-      final newest = history.last.price;
-      if (oldest > 0) change24h = (newest - oldest) / oldest;
-    }
-
-    final changeColor =
-        change24h >= 0 ? AppColors.positive : AppColors.negative;
-
     final mayerColor = mayer > 2.4
         ? AppColors.negative
         : (mayer > 0 && mayer < 0.8)
@@ -124,48 +105,27 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
       overlayDma200 = List.filled(chartLen, null);
     }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      const headerH = 56.0;
-      final totalH = constraints.maxHeight;
-      final chartH = (totalH - headerH - 16) * 0.50;
-      final statsH = (totalH - headerH - 16) * 0.50;
-
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _header(
-              'BTC',
-              'OVERVIEW',
-              price > 0 ? '\$${_priceFmt.format(price.round())}' : '—',
-              price > 0 ? _formatPct(change24h) : '—',
-              changeColor,
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: chartH,
-              child: _buildChart(context, history, overlayDma200),
-            ),
-            SizedBox(
-              height: statsH,
-              child: _buildStats(
-                mayer,
-                mayerColor,
-                currentDma,
-                mvrv,
-                mvrvColor,
-                currentRealized,
-                supplyInProfit,
-                fundingRate,
-                fundingAnnualized,
-                fundColor,
-              ),
-            ),
-          ],
-        ),
-      );
-    });
+    return CategoryPageLayout(
+      header: const CategoryPageHeader(
+        category: 'BTC',
+        title: 'Overview',
+        accentColor: AppColors.btcOrange,
+        trailingHint: 'Spot vs on-chain',
+      ),
+      chart: _buildChart(context, history, overlayDma200),
+      stats: _buildStats(
+        mayer,
+        mayerColor,
+        currentDma,
+        mvrv,
+        mvrvColor,
+        currentRealized,
+        supplyInProfit,
+        fundingRate,
+        fundingAnnualized,
+        fundColor,
+      ),
+    );
   }
 
   Widget _buildChart(
@@ -275,15 +235,15 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
-                reservedSize: 68,
+                reservedSize: kChartAxisReservedRight,
                 getTitlesWidget: (value, meta) {
                   if (value == meta.min || value == meta.max) {
                     return const SizedBox.shrink();
                   }
                   return Text(
-                    _compactPrice(value),
+                    formatAxisUsdCompact(value),
                     style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 10),
+                        color: AppColors.textMuted, fontSize: 9),
                     textAlign: TextAlign.right,
                   );
                 },
@@ -480,56 +440,6 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     );
   }
 
-  Widget _header(
-    String category,
-    String page,
-    String value,
-    String change,
-    Color changeColor,
-  ) {
-    return SizedBox(
-      height: 56,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Row(children: [
-            Text(category,
-                style: const TextStyle(
-                    color: AppColors.btcOrange,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.5)),
-            const SizedBox(width: 6),
-            Text(page,
-                style: const TextStyle(
-                    color: AppColors.textMuted,
-                    fontSize: 10,
-                    letterSpacing: 1.0)),
-          ]),
-          const SizedBox(height: 2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(value,
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1.0)),
-              const SizedBox(width: 8),
-              Text(change,
-                  style: TextStyle(
-                      color: changeColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _StatPanel extends StatelessWidget {
