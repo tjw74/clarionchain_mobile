@@ -24,3 +24,5 @@ android/app/release/
 
 # Generated
 lib/generated/
+clarionchain.jks
+android/app/keystore.jks
