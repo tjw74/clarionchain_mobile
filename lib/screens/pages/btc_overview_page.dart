@@ -20,7 +20,8 @@ class BtcOverviewPage extends ConsumerStatefulWidget {
   ConsumerState<BtcOverviewPage> createState() => _BtcOverviewPageState();
 }
 
-class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
+class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage>
+    with SingleTickerProviderStateMixin {
   double _viewStart = 0.0;
   double _viewEnd = 1.0;
 
@@ -28,6 +29,23 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
   double _gsFocalX = 0;
   double _gsViewStart = 0;
   double _gsViewEnd = 1;
+
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,8 +60,13 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
 
     final dailyPrices =
         dailyAsync.valueOrNull?.map((t) => t.price).toList() ?? [];
-    final dma200 =
-        dailyPrices.length >= 200 ? sma(dailyPrices, 200) : <double?>[];
+    final chartPrices = history.map((t) => t.price).toList();
+    final pricesForStats =
+        dailyPrices.isNotEmpty ? dailyPrices : chartPrices;
+
+    final dma200 = pricesForStats.length >= 200
+        ? sma(pricesForStats, 200)
+        : <double?>[];
 
     double? currentDma;
     if (dma200.isNotEmpty) {
@@ -91,27 +114,23 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         ? AppColors.negative
         : (fundingRate < -0.0001 ? AppColors.positive : AppColors.textPrimary);
 
-    // Align DMA overlay to priceHistoryProvider (2yr daily) indices
-    // priceHistoryProvider has up to 730 points; dailyAsync has full history
-    // We take the last N points of dma200 matching the chart data length
     final chartLen = history.length;
-    final List<double?> overlayDma200;
-    if (dma200.isNotEmpty && chartLen > 0) {
-      final totalDaily = dailyAsync.valueOrNull?.length ?? 0;
-      if (totalDaily >= chartLen) {
-        overlayDma200 = dma200.sublist(totalDaily - chartLen);
-      } else {
-        overlayDma200 = List.filled(chartLen, null);
+    List<double?> tailAlign(List<double?> full) {
+      if (full.isEmpty || chartLen == 0) {
+        return List<double?>.filled(chartLen, null);
       }
-    } else {
-      overlayDma200 = List.filled(chartLen, null);
+      if (full.length == chartLen) return List<double?>.from(full);
+      if (full.length > chartLen) return full.sublist(full.length - chartLen);
+      return List<double?>.filled(chartLen, null);
     }
+
+    final overlayDma200 = tailAlign(dma200);
 
     return CategoryPageLayout(
       header: const CategoryPageHeader(
         category: 'BTC',
         title: 'Overview',
-        accentColor: AppColors.btcOrange,
+        accentColor: AppColors.accent,
         trailingHint: 'Spot vs on-chain',
       ),
       chart: _buildChart(context, history, overlayDma200),
@@ -128,6 +147,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         fundingAnnualized,
         fundColor,
         fundingData != null,
+        dailyAsync.isLoading,
+        realizedAsync.isLoading,
+        realizedAsync.hasError,
+        supplyAsync.isLoading,
+        supplyAsync.hasError,
       ),
     );
   }
@@ -140,7 +164,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     if (history.isEmpty) {
       return const Center(
         child: CircularProgressIndicator(
-            color: AppColors.btcOrange, strokeWidth: 2),
+            color: AppColors.accent, strokeWidth: 2),
       );
     }
 
@@ -159,7 +183,6 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     double minP = prices.reduce((a, b) => a < b ? a : b);
     double maxP = prices.reduce((a, b) => a > b ? a : b);
 
-    // Include overlay values in y range
     for (int i = startIdx; i <= endIdx && i < overlayDma200.length; i++) {
       final v = overlayDma200[i];
       if (v != null) {
@@ -168,20 +191,17 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
       }
     }
 
-    final yPad = ((maxP - minP) * 0.08).clamp(50.0, double.infinity);
-    final effMin = minP - yPad;
-    final effMax = maxP + yPad;
+    final (effMin, effMax) = yRangeWithMinSpan(minP, maxP);
 
     final isUp = slice.last.price >= slice.first.price;
     final lineColor = isUp ? AppColors.positive : AppColors.negative;
+    final dotCore = AppColors.accent;
     final vc = slice.length;
-    final labelInterval = (vc / 4).floorToDouble().clamp(1.0, double.infinity);
-    final visibleDays = slice.last.timestamp
-            .difference(slice.first.timestamp)
-            .inMinutes /
-        1440.0;
+    final labelIdx = xAxisLabelIndices(vc).toSet();
+    final spanDays =
+        slice.last.timestamp.difference(slice.first.timestamp).inMinutes /
+            1440.0;
 
-    // Overlay spots
     final dmaSpots = <FlSpot>[];
     for (int i = 0; i < slice.length; i++) {
       final gi = startIdx + i;
@@ -190,6 +210,9 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         if (v != null) dmaSpots.add(FlSpot(i.toDouble(), v));
       }
     }
+
+    const rightReserved = kChartAxisReservedRight;
+    const bottomReserved = 22.0;
 
     return GestureDetector(
       onScaleStart: (d) {
@@ -218,102 +241,158 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         _viewStart = 0;
         _viewEnd = 1.0;
       }),
-      child: LineChart(
-        LineChartData(
-          minY: effMin,
-          maxY: effMax,
-          clipData: const FlClipData.all(),
-          lineTouchData: const LineTouchData(enabled: false),
-          gridData: FlGridData(
-            show: true,
-            drawVerticalLine: false,
-            getDrawingHorizontalLine: (_) =>
-                const FlLine(color: AppColors.border, strokeWidth: 1),
-          ),
-          borderData: FlBorderData(show: false),
-          titlesData: FlTitlesData(
-            leftTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: kChartAxisReservedRight,
-                getTitlesWidget: (value, meta) {
-                  if (value == meta.min || value == meta.max) {
-                    return const SizedBox.shrink();
-                  }
-                  return Text(
-                    formatAxisUsdCompact(value),
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 9),
-                    textAlign: TextAlign.right,
-                  );
-                },
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 22,
-                interval: labelInterval,
-                getTitlesWidget: (value, meta) {
-                  final idx = value.toInt();
-                  if (idx < 0 || idx >= slice.length) {
-                    return const SizedBox.shrink();
-                  }
-                  final dt = slice[idx].timestamp;
-                  final label = visibleDays > 365
-                      ? DateFormat('MMM yy').format(dt)
-                      : visibleDays > 60
-                          ? DateFormat('MMM').format(dt)
-                          : DateFormat('MMM d').format(dt);
-                  return Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(label,
-                        style: const TextStyle(
-                            color: AppColors.textMuted, fontSize: 9)),
-                  );
-                },
-              ),
-            ),
-          ),
-          lineBarsData: [
-            LineChartBarData(
-              spots: spots,
-              isCurved: vc < 200,
-              curveSmoothness: 0.2,
-              color: lineColor,
-              barWidth: vc > 300 ? 1.5 : 2,
-              isStrokeCapRound: true,
-              dotData: const FlDotData(show: false),
-              belowBarData: BarAreaData(
-                show: true,
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    lineColor.withValues(alpha: 0.15),
-                    lineColor.withValues(alpha: 0.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final chartW = constraints.maxWidth - rightReserved;
+          final chartH = constraints.maxHeight - bottomReserved;
+          final lastPrice = slice.last.price;
+          final denom = (effMax - effMin).abs();
+          final dotY = denom > 1e-12
+              ? chartH * (1.0 - (lastPrice - effMin) / denom)
+              : chartH * 0.5;
+
+          return Stack(
+            clipBehavior: Clip.none,
+            children: [
+              LineChart(
+                LineChartData(
+                  minY: effMin,
+                  maxY: effMax,
+                  clipData: const FlClipData.all(),
+                  lineTouchData: const LineTouchData(enabled: false),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (_) =>
+                        const FlLine(color: AppColors.border, strokeWidth: 1),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false)),
+                    rightTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: rightReserved,
+                        getTitlesWidget: (value, meta) {
+                          if (value == meta.min || value == meta.max) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(
+                            formatAxisUsdCompact(value),
+                            style: const TextStyle(
+                                color: AppColors.textMuted, fontSize: 9),
+                            textAlign: TextAlign.right,
+                          );
+                        },
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: bottomReserved,
+                        interval: 1,
+                        getTitlesWidget: (value, meta) {
+                          final idx = value.round().clamp(0, slice.length - 1);
+                          if (!labelIdx.contains(idx)) {
+                            return const SizedBox.shrink();
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              bottomAxisDateLabel(
+                                  slice[idx].timestamp, spanDays),
+                              style: const TextStyle(
+                                  color: AppColors.textMuted, fontSize: 9),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  lineBarsData: [
+                    LineChartBarData(
+                      spots: spots,
+                      isCurved: vc < 200,
+                      curveSmoothness: 0.2,
+                      color: lineColor,
+                      barWidth: vc > 300 ? 1.5 : 2,
+                      isStrokeCapRound: true,
+                      dotData: const FlDotData(show: false),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            lineColor.withValues(alpha: 0.15),
+                            lineColor.withValues(alpha: 0.0),
+                          ],
+                        ),
+                      ),
+                    ),
+                    if (dmaSpots.isNotEmpty)
+                      LineChartBarData(
+                        spots: dmaSpots,
+                        isCurved: false,
+                        color: AppColors.accentSecondary,
+                        barWidth: 1.2,
+                        isStrokeCapRound: true,
+                        dotData: const FlDotData(show: false),
+                        belowBarData: BarAreaData(show: false),
+                      ),
                   ],
                 ),
+                duration: const Duration(milliseconds: 120),
+                curve: Curves.easeOut,
               ),
-            ),
-            if (dmaSpots.isNotEmpty)
-              LineChartBarData(
-                spots: dmaSpots,
-                isCurved: false,
-                color: const Color(0xFFFFD700),
-                barWidth: 1.2,
-                isStrokeCapRound: true,
-                dotData: const FlDotData(show: false),
-                belowBarData: BarAreaData(show: false),
+              Positioned(
+                left: chartW - 10,
+                top: dotY - 10,
+                child: AnimatedBuilder(
+                  animation: _pulse,
+                  builder: (_, __) {
+                    final t = _pulse.value;
+                    return SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: 6 + 14 * t,
+                            height: 6 + 14 * t,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: dotCore.withValues(alpha: (1 - t) * 0.28),
+                            ),
+                          ),
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: dotCore,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: dotCore.withValues(alpha: 0.45),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-          ],
-        ),
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
+            ],
+          );
+        },
       ),
     );
   }
@@ -331,6 +410,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
     double fundingAnnualized,
     Color fundColor,
     bool hasFunding,
+    bool dailyLoading,
+    bool realizedLoading,
+    bool realizedError,
+    bool supplyLoading,
+    bool supplyError,
   ) {
     final mayerSignal = mayer > 2.4
         ? 'Historically expensive'
@@ -352,6 +436,33 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
         ? '${fundingAnnualized.toStringAsFixed(1)}% annualized'
         : '';
 
+    String dmaSub() {
+      if (currentDma != null) return '200-day moving average';
+      if (dailyLoading) return 'Loading history…';
+      return 'Need ≥200 daily closes';
+    }
+
+    String mvrvSub() {
+      if (mvrv > 0) return mvrvSignal;
+      if (realizedLoading) return 'Loading on-chain…';
+      if (realizedError) return 'On-chain data unavailable';
+      return 'Fair value range';
+    }
+
+    String realizedSub() {
+      if (currentRealized > 0) return 'Avg cost basis on-chain';
+      if (realizedLoading) return 'Loading on-chain…';
+      if (realizedError) return 'Unavailable';
+      return 'Avg cost basis on-chain';
+    }
+
+    String supplySub() {
+      if (hasSupplyInProfit) return '% of UTXOs above cost';
+      if (supplyLoading) return 'Loading…';
+      if (supplyError) return 'Unavailable';
+      return '% of UTXOs above cost';
+    }
+
     return Column(
       children: [
         const SizedBox(height: 8),
@@ -367,7 +478,11 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
                         label: 'MAYER MULTIPLE',
                         value: mayer > 0 ? mayer.toStringAsFixed(2) : '—',
                         valueColor: mayer > 0 ? mayerColor : AppColors.textPrimary,
-                        signal: mayerSignal,
+                        signal: mayer > 0
+                            ? mayerSignal
+                            : (dailyLoading
+                                ? 'Loading…'
+                                : 'Need 200 DMA + spot'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -378,7 +493,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
                             ? '\$${_priceFmt.format(currentDma.round())}'
                             : '—',
                         valueColor: AppColors.textPrimary,
-                        signal: '200-day moving average',
+                        signal: dmaSub(),
                       ),
                     ),
                   ],
@@ -394,7 +509,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
                         label: 'MVRV RATIO',
                         value: mvrv > 0 ? mvrv.toStringAsFixed(2) : '—',
                         valueColor: mvrv > 0 ? mvrvColor : AppColors.textPrimary,
-                        signal: mvrvSignal,
+                        signal: mvrvSub(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -404,8 +519,8 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
                         value: currentRealized > 0
                             ? '\$${_priceFmt.format(currentRealized.round())}'
                             : '—',
-                        valueColor: AppColors.btcOrange,
-                        signal: 'Avg cost basis on-chain',
+                        valueColor: AppColors.accent,
+                        signal: realizedSub(),
                       ),
                     ),
                   ],
@@ -425,7 +540,7 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
                             : supplyInProfit > 0 && supplyInProfit < 50
                                 ? AppColors.positive
                                 : AppColors.textPrimary,
-                        signal: '% of UTXOs above cost',
+                        signal: supplySub(),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -446,7 +561,6 @@ class _BtcOverviewPageState extends ConsumerState<BtcOverviewPage> {
       ],
     );
   }
-
 }
 
 class _StatPanel extends StatelessWidget {
@@ -493,7 +607,7 @@ class _StatPanel extends StatelessWidget {
             Text(signal,
                 style: const TextStyle(
                     color: AppColors.textSecondary, fontSize: 10),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis),
           ],
         ],

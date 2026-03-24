@@ -1,25 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../providers/price_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/chart_axis_labels.dart';
-
-/// Few x-axis ticks so labels stay distinct (avoids repeated “Mar 24” from fl_chart).
-List<int> _xAxisLabelIndices(int len) {
-  if (len <= 1) return [0];
-  if (len <= 6) return List.generate(len, (i) => i);
-  return [0, len ~/ 4, len ~/ 2, (3 * len) ~/ 4, len - 1];
-}
-
-String _bottomAxisDateLabel(DateTime dt, double spanDays) {
-  if (spanDays <= 1) return DateFormat('HH:mm').format(dt);
-  if (spanDays <= 7) return DateFormat('EEE d').format(dt);
-  if (spanDays <= 120) return DateFormat('MMM d').format(dt);
-  // Multi-month / years: always include year so ticks don’t collide.
-  return DateFormat('MMM \'yy').format(dt);
-}
 
 /// An optional overlay line on the price chart.
 class ChartOverlay {
@@ -111,15 +95,13 @@ class _PriceChartState extends ConsumerState<PriceChart>
     final prices = history.map((t) => t.price).toList();
     final minPrice = prices.reduce((a, b) => a < b ? a : b);
     final maxPrice = prices.reduce((a, b) => a > b ? a : b);
-    final yPad = ((maxPrice - minPrice) * 0.08).clamp(50.0, double.infinity);
-    final effMin = minPrice - yPad;
-    final effMax = maxPrice + yPad;
+    final (effMin, effMax) = yRangeWithMinSpan(minPrice, maxPrice);
 
     final isUp = history.last.price >= history.first.price;
     final lineColor = isUp ? AppColors.positive : AppColors.negative;
     final dotCore = AppColors.accent;
     final vc = history.length;
-    final labelIdx = _xAxisLabelIndices(vc).toSet();
+    final labelIdx = xAxisLabelIndices(vc).toSet();
     final spanDays =
         history.last.timestamp.difference(history.first.timestamp).inMinutes /
             1440.0;
@@ -214,7 +196,7 @@ class _PriceChartState extends ConsumerState<PriceChart>
                       return Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
-                          _bottomAxisDateLabel(
+                          bottomAxisDateLabel(
                               history[idx].timestamp, spanDays),
                           style: const TextStyle(
                               color: AppColors.textMuted, fontSize: 9),
