@@ -26,3 +26,7 @@ android/app/release/
 lib/generated/
 clarionchain.jks
 android/app/keystore.jks
+
+# APKs belong in GitHub Releases, not in git (avoids huge blobs + confusing “download file” UX)
+/clarionchain.apk
+/ClarionChain.apk

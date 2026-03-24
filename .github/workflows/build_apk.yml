@@ -42,23 +42,42 @@ jobs:
           KEY_ALIAS: clarionchain
           KEY_PASSWORD: clarionchain2024
 
+      # Single clear filename for humans + correct Content-Type on Releases (no .bin rename)
+      - name: Name APK for release
+        run: cp build/app/outputs/flutter-apk/app-release.apk ClarionChain.apk
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
-          retention-days: 7
+          name: ClarionChain-apk
+          path: ClarionChain.apk
+          retention-days: 14
 
-      - name: Create GitHub Release
+      # Versioned release when you push a tag like v1.5.0
+      - name: Create versioned GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: build/app/outputs/flutter-apk/app-release.apk
+          files: ClarionChain.apk
           name: ClarionChain ${{ github.ref_name }}
           body: |
             ## ClarionChain ${{ github.ref_name }}
 
-            ### Install
-            1. Download `app-release.apk` below
-            2. Open it on your Android / GrapheneOS device
-            3. Allow "Install unknown apps" if prompted
+            Download **ClarionChain.apk** under Assets (normal filename — no rename).
+
+      # Always-updated “Latest” install — one place to send people
+      - name: Publish ClarionChain — Latest (main only)
+        if: github.ref == 'refs/heads/main'
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: ClarionChain.apk
+          tag: v1.4.0
+          name: ClarionChain — Latest
+          body: |
+            **Install:** download **ClarionChain.apk** in Assets below (correct `.apk` name for Android).
+
+            This release is updated automatically every time `main` is pushed.
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
+          token: ${{ secrets.GITHUB_TOKEN }}
