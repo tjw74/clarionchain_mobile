@@ -74,7 +74,18 @@ class SentimentPage extends ConsumerWidget {
                                   letterSpacing: 0.8,
                                 ),
                               ),
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Mapped from NUPL (BRK / bitview.space)',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.textMuted,
+                                  height: 1.2,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
                               _GaugeWidget(value: s.fearGreedIndex),
                               const SizedBox(height: 16),
                               Text(
@@ -343,7 +354,7 @@ class _UnavailableCard extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'The metric name may need verification\nagainst the bitview.space API.',
+            'Could not load the NUPL series from\nbitview.space (Bitcoin Research Kit API).',
             textAlign: TextAlign.center,
             style: TextStyle(
                 color: AppColors.textMuted, fontSize: 12, height: 1.5),
